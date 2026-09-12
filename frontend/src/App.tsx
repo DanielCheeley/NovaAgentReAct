@@ -57,7 +57,8 @@ function App() {
       return;
     }
 
-    const conversationId = activeConversationId
+    const conversationId = activeConversationId;
+    const userMessage = message;
 
     setGeneratingConversationIds((previousIds) => {
       const newIds = new Set(previousIds);
@@ -95,27 +96,49 @@ function App() {
     }
 
     //simulates a delay for Nova's response and respond with a set message
-    setTimeout(() => {
-      setConversations((previousConversations) => previousConversations.map((conversation) => {
-        if (conversation.id !== conversationId) {
-          return conversation;
-        }
+    try {
+      const response = await fetch("http://localhost:3000/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          conversationId,
+          message: userMessage
+        })
+      });
 
-        return {
-            ...conversation, messages: [...conversation.messages,
+      const data = await response.json();
+
+      console.log(data);
+    
+      setConversations((previousConversations) =>
+        previousConversations.map((conversation) => {
+          if (conversation.id !== conversationId) {
+            return conversation;
+          }
+        
+          return {
+            ...conversation,
+            messages: [
+              ...conversation.messages,
               {
                 sender: "nova" as const,
-                text: "Hello! I'm Nova. This is a fake response for now."
+                text: data.message
               }
             ]
-        };
-      }));
+          };
+        })
+      );
+    } catch (error) {
+      console.error("Failed to contact Nova backend:", error);
+    } finally {
       setGeneratingConversationIds((previousIds) => {
         const newIds = new Set(previousIds);
         newIds.delete(conversationId);
         return newIds;
       });
-    }, 500);
+    }
   };
 
 
