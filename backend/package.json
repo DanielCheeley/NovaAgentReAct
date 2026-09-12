@@ -9,6 +9,11 @@
     "start": "node dist/index.js",
     "build": "tsc && npm install --prefix vite-project && npm run build --prefix vite-project"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DanielCheeley/NovaAgentReAct.git"
+  },
+  "type": "module",
   "dependencies": {
     "cors": "^2.8.6",
     "debug": "^4.4.3",
