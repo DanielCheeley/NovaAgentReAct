@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
+import { novaAgent } from "../novaCore/agent";
 
-export function chatController(
+export async function chatController(
   req: Request,
   res: Response,
   next: NextFunction
@@ -8,9 +9,14 @@ export function chatController(
   try {
     const { conversationId, message } = req.body;
 
+    const agentResponse = await novaAgent(
+      conversationId,
+      message
+    )
+
     res.status(200).json({
       conversationId,
-      message: "hello from Nova's backend!"
+      message: agentResponse
     });
   } catch (error) {
     next(error);
