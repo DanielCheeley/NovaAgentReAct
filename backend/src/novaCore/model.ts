@@ -1,9 +1,10 @@
 import Stream from "stream";
 import { MODEL_CONFIG } from "./novaConfig";
 import { NOVA_SYSTEM_PROMPT } from "./novaPrompt";
+import { Message } from "../types/message";
 
 
-export async function generateResponse(message:string): Promise<string> {
+export async function generateResponse(messages: Message[]): Promise<string> {
   const response = await fetch(MODEL_CONFIG.url, {
     method: "POST",
     headers: {
@@ -16,13 +17,10 @@ export async function generateResponse(message:string): Promise<string> {
           role: "system",
           content: NOVA_SYSTEM_PROMPT
         },
-        {
-          role: "user",
-          content: message
-        }
+        ...messages
       ],
-      stream: false,
-      think: false
+      stream: MODEL_CONFIG.stream,
+      think: MODEL_CONFIG.think
     })
   });
 
