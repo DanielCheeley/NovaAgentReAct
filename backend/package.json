@@ -5,8 +5,8 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tsx watch --env-file=.env src/index.ts",
-    "start": "node dist/index.js",
+    "dev": "tsx watch --env-file=.env src/server.ts",
+    "start": "node dist/server.js",
     "build": "tsc && npm install --prefix vite-project && npm run build --prefix vite-project"
   },
   "repository": {
