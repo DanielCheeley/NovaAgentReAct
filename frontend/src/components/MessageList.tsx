@@ -8,9 +8,10 @@ type Message = {
 type MessageListProps = {
   messages: Message[];
   messagesRef: RefObject<HTMLElement | null>;
+  isGenerating: boolean;
 };
 
-function MessageList({ messages, messagesRef }: MessageListProps) {
+function MessageList({ messages, messagesRef, isGenerating }: MessageListProps) {
   return (
     <section className="messages" ref={messagesRef}>
       {messages.length === 0 ? (
@@ -32,6 +33,14 @@ function MessageList({ messages, messagesRef }: MessageListProps) {
               {message.text}
             </div>
           ))}
+
+          {isGenerating && (
+            <div className="nova-thinking">
+              <span>●</span>
+              <span>●</span>
+              <span>●</span>
+            </div>
+          )}
         </div>
       )}
     </section>

@@ -26,6 +26,8 @@ function App() {
   const [activeConversationId, setActiveConversationId] = useState(1);
   const activeConversation = conversations.find ((conversation) => conversation.id === activeConversationId);
 
+  const [generatingConversationIds, setGeneratingConversationIds] = useState<Set<number>>(new Set());
+
   //create new conversation
   const createNewConversation = () => {
     const newConversation: Conversation = {
@@ -50,14 +52,22 @@ function App() {
   }, [activeConversation?.messages]);
 
   //sends a message to a new array with previous messages
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (message.trim() === "") {
       return;
     }
 
+    const conversationId = activeConversationId
+
+    setGeneratingConversationIds((previousIds) => {
+      const newIds = new Set(previousIds);
+      newIds.add(conversationId);
+      return newIds;
+    });
+
     //sets the new array
     setConversations((previousConversations) => {
-      const conversation = previousConversations.find((conversation) => conversation.id === activeConversationId);
+      const conversation = previousConversations.find((conversation) => conversation.id === conversationId);
 
       if (!conversation) {
         return previousConversations;
@@ -87,7 +97,7 @@ function App() {
     //simulates a delay for Nova's response and respond with a set message
     setTimeout(() => {
       setConversations((previousConversations) => previousConversations.map((conversation) => {
-        if (conversation.id !== activeConversationId) {
+        if (conversation.id !== conversationId) {
           return conversation;
         }
 
@@ -100,6 +110,11 @@ function App() {
             ]
         };
       }));
+      setGeneratingConversationIds((previousIds) => {
+        const newIds = new Set(previousIds);
+        newIds.delete(conversationId);
+        return newIds;
+      });
     }, 500);
   };
 
@@ -123,6 +138,7 @@ function App() {
         <MessageList
           messages={activeConversation?.messages ?? []}
           messagesRef={messagesRef}
+          isGenerating={generatingConversationIds.has(activeConversationId)}
         />
 
         <MessageInput
