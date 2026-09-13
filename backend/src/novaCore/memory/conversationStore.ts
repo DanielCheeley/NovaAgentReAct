@@ -1,4 +1,4 @@
-import { Conversation, Message } from "../../types/conversation";
+import { Conversation, Message } from "../../types/conversationType";
 
 const conversations = new Map<number, Conversation>();
 

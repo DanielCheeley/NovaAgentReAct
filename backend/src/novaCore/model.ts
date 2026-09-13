@@ -1,7 +1,7 @@
 import Stream from "stream";
 import { MODEL_CONFIG } from "./novaConfig";
 import { NOVA_SYSTEM_PROMPT } from "./novaPrompt";
-import { Message } from "../types/conversation";
+import { Message } from "../types/conversationType";
 
 
 export async function generateResponse(messages: Message[]): Promise<string> {

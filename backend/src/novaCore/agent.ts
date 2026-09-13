@@ -29,7 +29,6 @@ export async function novaAgent(
     content: response
   });
 
-  logger("Conversation:", conversation)
   logger("Nova responded:", response)
 
   return response
