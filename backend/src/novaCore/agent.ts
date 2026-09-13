@@ -21,13 +21,15 @@ export async function novaAgent(
     message
   });
   //give whole conversation to the model
-  const response = await generateResponse(conversation)
+  const response = await generateResponse(conversation.messages)
 
   //add nova's response to conversation
   addMessage(conversationId, {
     role: "assistant",
     content: response
   });
+
+  logger("Conversation:", conversation)
   logger("Nova responded:", response)
 
   return response

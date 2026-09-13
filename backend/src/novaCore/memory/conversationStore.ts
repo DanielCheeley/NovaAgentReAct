@@ -1,13 +1,26 @@
-import { Message } from "../../types/message";
+import { Conversation, Message } from "../../types/conversation";
 
-const conversations = new Map<number, Message[]>();
+const conversations = new Map<number, Conversation>();
 
-export function getConversation(conversationId: number): Message[] {
-  if (!conversations.has(conversationId)) {
-    conversations.set(conversationId, []);
+export function createConversation(conversationId: number): Conversation {
+  const conversation: Conversation = {
+    id: conversationId,
+    messages: []
+  };
+
+  conversations.set(conversationId, conversation);
+
+  return conversation;
+}
+
+export function getConversation(conversationId: number): Conversation {
+  let conversation = conversations.get(conversationId);
+
+  if (!conversation) {
+    conversation = createConversation(conversationId);
   }
 
-  return conversations.get(conversationId)!;
+  return conversation;
 }
 
 export function addMessage(
@@ -16,5 +29,5 @@ export function addMessage(
 ): void {
   const conversation = getConversation(conversationId);
 
-  conversation.push(message);
+  conversation.messages.push(message);
 }
