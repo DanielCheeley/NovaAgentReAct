@@ -1,10 +1,11 @@
 import debug from "debug";
 import { generateResponse } from "./model";
 import { getConversation, addMessage } from "./memory/conversationStore";
+import { NovaEvent } from "../types/eventType";
 
 const logger = debug("NovaAgent:Agent");
 
-export async function novaAgent(
+export async function handleMessage(
   conversationId: number,
   message: string
 ) {
@@ -15,6 +16,7 @@ export async function novaAgent(
     role: "user",
     content: message
   })
+
   //log received user input to server
   logger("Nova received:", {
     conversationId,
@@ -32,4 +34,8 @@ export async function novaAgent(
   logger("Nova responded:", response)
 
   return response
+}
+
+export async function handleEvent(event: NovaEvent) {
+  logger("Nova handling event:", event)
 }

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { novaAgent } from "../novaCore/agent";
+import { handleMessage } from "../novaCore/agent";
 
 export async function chatController(
   req: Request,
@@ -9,7 +9,7 @@ export async function chatController(
   try {
     const { conversationId, message } = req.body;
 
-    const agentResponse = await novaAgent(
+    const agentResponse = await handleMessage(
       conversationId,
       message
     )
