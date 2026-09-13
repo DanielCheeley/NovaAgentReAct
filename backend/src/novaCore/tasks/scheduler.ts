@@ -3,10 +3,10 @@ import { emit } from "../events/eventBus";
 export function startScheduler() {
   setInterval(() => {
     emit({
-      type: "timer.tick",
+      type: "task.due",
       data: {
-        time: new Date()
+        task: "this is a test task. tell the user that the scheduled task worked."
       }
     });
-  }, 10000);
+  }, 20000);
 }

@@ -37,5 +37,14 @@ export async function handleMessage(
 }
 
 export async function handleEvent(event: NovaEvent) {
-  logger("Nova handling event:", event)
+  logger("Nova handling event:", event);
+
+  const response = await generateResponse([
+    {
+    role: "system",
+    content: `An event has occurred: ${JSON.stringify(event)} Determine what Nova should do in response.`
+    }
+  ]);
+
+  logger("Nova Decided:", response)
 }
