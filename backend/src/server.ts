@@ -6,9 +6,6 @@ import { healthRouter } from "./routes/health";
 import { chatRouter } from "./routes/chat";
 import { errorHandler } from "./middleware/errorHandler";
 import "./novaCore/events/novaEventHandler"
-import { startScheduler } from "./novaCore/tasks/scheduler";
-
-startScheduler();
 
 //create a logger instance for the server
 const logger = debug('NovaAgent:server');

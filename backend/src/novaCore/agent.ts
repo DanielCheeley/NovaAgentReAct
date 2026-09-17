@@ -73,7 +73,17 @@ async function runAgent(messages: Message[]) {
       }
 
       logger("nova is using tool:", toolName)
-      const result = await tool(toolCall.function.arguments);
+      
+      let result;
+
+      try {
+      result = await tool(toolCall.function.arguments);
+      } catch(error) {
+        result = {
+          success: false,
+          error: error instanceof Error ? error.message : "unknown tool error"
+        };
+      }
 
       logger("Tool result:", result);
 

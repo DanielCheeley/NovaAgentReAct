@@ -10,7 +10,7 @@ completeTask: async (args) => {
   },
 
   getWeather: async (args) => {
-    return getWeather({location: args.location as string});
+    return getWeather({location: args.location as string, state: args.state as string | undefined, country: args.country as string | undefined});
   },
 
   getDateAndTime: async () => {
@@ -47,7 +47,15 @@ export const toolDefinitions = [
         properties: {
           location: {
             type: "string",
-            description: "The location to get weather for"
+            description: "The city or location to get weather for"
+          },
+          state: {
+            type: "string",
+            description: "The state, province, or region of the location, if known"
+          },
+          country: {
+            type: "string",
+            description: "The country of the location, if known"
           }
         },
         required: ["location"]
