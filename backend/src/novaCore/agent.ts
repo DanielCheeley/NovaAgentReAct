@@ -12,27 +12,27 @@ export async function handleMessage(
   conversationId: number,
   message: string
 ) {
-  const conversation = getConversation(conversationId);
-
   addMessage(conversationId, {
     role: "user",
     content: message
   });
 
+  const conversation = getConversation(conversationId);
+
   logger("Nova received:", {conversationId, message});
 
   const messages = [...conversation.messages];
 
-  const response = await runAgent(messages);
+  const result = await runAgent(messages);
 
-  addMessage(conversationId, {
-    role: "assistant",
-    content: response
-  });
+  //save everything generated during this agent request
+  for(const generatedMessage of result.messages) {
+    addMessage(conversationId, generatedMessage)
+  }
 
-  logger("Nova Responded:", response);
+  logger("Nova Responded:", result);
 
-  return response;
+  return result.response;
 }
 
 //handle for a recived event
@@ -56,13 +56,34 @@ export async function handleEvent(event: NovaEvent) {
 //runs the LLM Agent loop with tools
 async function runAgent(messages: Message[]) {
   const MAX_LOOPS = 5;
+  const generatedMessages: Message[] = [];
 
   for (let i = 0; i < MAX_LOOPS; i++) {
     const response = await generateResponse(messages);
 
     if (!response.tool_calls) {
-      return response.content;
+      const assistantMessage: Message = {
+        role: "assistant",
+        content: response.content
+      }
+
+      messages.push(assistantMessage)
+      generatedMessages.push(assistantMessage)
+
+      return {
+        response: response.content,
+        messages: generatedMessages
+      }
     }
+
+    const toolCallMessage: Message = {
+      role: "assistant",
+      content: response.content ?? "",
+      tool_calls: response.tool_calls
+    }
+
+    messages.push(toolCallMessage)
+    generatedMessages.push(toolCallMessage)
 
     for (const toolCall of response.tool_calls) {
       const toolName = toolCall.function.name;
@@ -87,10 +108,15 @@ async function runAgent(messages: Message[]) {
 
       logger("Tool result:", result);
 
-      messages.push({
-        role: "system",
-        content: `Tool "${toolName}" returned: ${JSON.stringify(result)}`
-      });
+      const toolMessage: Message = {
+        role: "tool",
+        tool_call_id: toolCall.id,
+        tool_name: toolName,
+        content: JSON.stringify(result)
+      }
+
+      messages.push(toolMessage);
+      generatedMessages.push(toolMessage)
     }
   }
 

@@ -1,6 +1,7 @@
 import { completeTask } from "./completeTask";
 import { getWeather } from "./getWeather";
 import { getDateAndTime } from "./getDateAndTime";
+import { getForecast } from "./getForecast";
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
 
@@ -12,6 +13,14 @@ completeTask: async (args) => {
   getWeather: async (args) => {
     return getWeather({location: args.location as string, state: args.state as string | undefined, country: args.country as string | undefined});
   },
+
+  getForecast: async (args) => {
+    return getForecast({
+        location: args.location as string,
+        state: args.state as string | undefined,
+        country: args.country as string | undefined
+      });
+    },
 
   getDateAndTime: async () => {
     return getDateAndTime();
@@ -56,6 +65,32 @@ export const toolDefinitions = [
           country: {
             type: "string",
             description: "The country of the location, if known"
+          }
+        },
+        required: ["location"]
+      }
+    }
+  },
+
+  {
+  type: "function",
+    function: {
+      name: "getForecast",
+      description: "Gets the weather forecast for a location.",
+      parameters: {
+        type: "object",
+        properties: {
+          location: {
+            type: "string",
+            description: "The city or location"
+          },
+          state: {
+            type: "string",
+            description: "The state, province, or region, if known"
+          },
+          country: {
+            type: "string",
+            description: "The country, if known"
           }
         },
         required: ["location"]

@@ -1,3 +1,4 @@
+import { getWeatherDescription } from "./helperFunctions/describeWeatherCodes";
 export async function getWeather({
   location,
   state,
@@ -37,28 +38,24 @@ export async function getWeather({
       throw new Error(`Location not found: ${location}`);
     }
 
-    // Find places that actually match the requested state
-    const stateMatches = state
-      ? geoLocationData.results.filter(
-          (result: any) =>
-            result.admin1?.toLowerCase() === state.toLowerCase()
-        )
-      : geoLocationData.results;
+    // Find places that match the requested location and state
+    const candidates = geoLocationData.results.filter(
+      (result: any) =>
+        result.name?.toLowerCase() === location.toLowerCase() &&
+        (!state ||
+          result.admin1?.toLowerCase() === state.toLowerCase())
+    );
 
     // If a state was provided but nothing matched it
-    if (state && stateMatches.length === 0) {
+    if (candidates.length === 0) {
+      if (state) {
       throw new Error(
         `Could not find ${location} in ${state}`
       );
     }
 
-    // Use state-filtered results if a state was provided
-    const candidates = state
-      ? stateMatches
-      : geoLocationData.results.filter(
-        (result: any) =>
-          result.name?.toLowerCase() === location.toLowerCase()
-        );
+    throw new Error(`Location not found: ${location}`);
+    }
 
     // If there are multiple possible locations and
     // the user didn't provide enough information, ask for clarification
@@ -93,7 +90,7 @@ export async function getWeather({
       temperature: weatherData.current.temperature_2m,
       feelsLike: weatherData.current.apparent_temperature,
       humidity: weatherData.current.relative_humidity_2m,
-      weatherCode: weatherData.current.weather_code,
+      condition: getWeatherDescription(weatherData.current.weather_code),
       windSpeed: weatherData.current.wind_speed_10m,
       windDirection: weatherData.current.wind_direction_10m
     };
