@@ -1,12 +1,21 @@
 import { emit } from "../events/eventBus";
+import { getPendingTasks, completeTask } from "./taskStore";
 
 export function startScheduler() {
   setInterval(() => {
-    emit({
-      type: "task.due",
-      data: {
-        task: "this is a test task. tell the user that the scheduled task worked."
+    const now = new Date();
+
+    const tasks = getPendingTasks();
+
+    for (const task of tasks) {
+      if (task.runAt <= now) {
+        emit({
+          type: "task.due",
+          data: task
+        });
+
+        completeTask(task.id);
       }
-    });
-  }, 20000);
+    }
+  }, 1000);
 }

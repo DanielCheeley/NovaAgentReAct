@@ -3,6 +3,8 @@ export async function getDateAndTime() {
 
   return {
     date: now.toLocaleDateString(),
-    time: now.toLocaleTimeString()
+    time: now.toLocaleTimeString(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    iso: now.toISOString()
   }
 }
