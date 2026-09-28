@@ -23,7 +23,7 @@ export async function handleMessage(
 
   const messages = [...conversation.messages];
 
-  const result = await runAgent(messages);
+  const result = await runAgent(messages, conversationId);
 
   //save everything generated during this agent request
   for(const generatedMessage of result.messages) {
@@ -54,7 +54,7 @@ export async function handleEvent(event: NovaEvent) {
 }
 
 //runs the LLM Agent loop with tools
-async function runAgent(messages: Message[]) {
+async function runAgent(messages: Message[], conversationId?: number) {
   const MAX_LOOPS = 5;
   const generatedMessages: Message[] = [];
 
@@ -98,7 +98,7 @@ async function runAgent(messages: Message[]) {
       let result;
 
       try {
-      result = await tool(toolCall.function.arguments);
+      result = await tool(toolCall.function.arguments, {conversationId});
       } catch(error) {
         result = {
           success: false,

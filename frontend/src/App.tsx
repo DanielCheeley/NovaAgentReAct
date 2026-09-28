@@ -1,6 +1,7 @@
 // import necessary modules
 import { useEffect, useRef, useState } from "react";
 import type { Conversation } from "./types/chat.ts";
+import { connectWebSocket, disconnectWebSocket, setWebSocketMessageHandler } from "./communication/websocket";
 import "./App.css";
 
 // import components
@@ -9,9 +10,12 @@ import MessageList from "./components/MessageList";
 import MessageInput from "./components/MessageInput";
 
 function App() {
+  //set up variables
   // references to the textarea and messages container
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<HTMLElement>(null);
+
+  const [activeConversationId, setActiveConversationId] = useState(1);
 
   // state for the message input and conversations
   const [message, setMessage] = useState("");
@@ -23,14 +27,54 @@ function App() {
     }
   ]);
 
-  const [activeConversationId, setActiveConversationId] = useState(1);
-
   const activeConversation = conversations.find(
     (conversation) => conversation.id === activeConversationId
   );
 
   const [generatingConversationIds, setGeneratingConversationIds] =
     useState<Set<number>>(new Set());
+
+
+  //set up websocket connection
+  useEffect(() => {
+  connectWebSocket();
+
+  return () => {
+    disconnectWebSocket();
+  };
+}, []);
+
+useEffect(() => {
+  setWebSocketMessageHandler((data) => {
+    if (data.type !== "nova.message") {
+      return;
+    }
+
+    setConversations((currentConversations) => {
+      return currentConversations.map((conversation) => {
+        //used for active conversation(might be useful later idk)
+        // if (conversation.id !== activeConversationId) {
+        //   return conversation;
+        // }
+        if (conversation.id !== data.conversationId) {
+          return conversation;
+        }
+
+        return {
+          ...conversation,
+          messages: [
+            ...conversation.messages,
+            {
+              sender: "nova",
+              text: data.message
+            }
+          ]
+        };
+      });
+    });
+  });
+}, [activeConversationId]);
+
 
   // create new conversation
   const createNewConversation = () => {

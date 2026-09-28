@@ -3,14 +3,17 @@ import { addTask } from "../tasks/taskStore";
 import { ScheduledTask } from "../../types/taskTypes";
 
 export async function scheduleTask({
+  conversationId,
   task,
   runAt
 }: {
+  conversationId: number;
   task: string;
   runAt: string;
 }) {
   const scheduledTask: ScheduledTask = {
     id: randomUUID(),
+    conversationId,
     task,
     runAt: new Date(runAt),
     status: "pending"

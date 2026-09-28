@@ -4,7 +4,10 @@ import { getDateAndTime } from "./getDateAndTime";
 import { getForecast } from "./getForecast";
 import { scheduleTask } from "./scheduleTask";
 
-type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
+type ToolContext = {
+  conversationId?: number;
+}
+type ToolHandler = (args: Record<string, unknown>, context: ToolContext) => Promise<unknown>;
 
 export const tools: Record<string, ToolHandler> = {
 completeTask: async (args) => {
@@ -26,8 +29,9 @@ completeTask: async (args) => {
   getDateAndTime: async () => {
     return getDateAndTime();
   },
-  scheduleTask: async (args) => {
+  scheduleTask: async (args, context) => {
     return scheduleTask({
+      conversationId: context.conversationId!,
       task: args.task as string,
       runAt: args.runAt as string
     });
