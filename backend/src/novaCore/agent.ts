@@ -39,18 +39,40 @@ export async function handleMessage(
 export async function handleEvent(event: NovaEvent) {
   logger("Nova handling event:", event);
 
+  const task = event.data as {
+    conversationId?: number;
+  };
+
+  if (typeof task.conversationId !== "number") {
+    throw new Error("Scheduled event is missing conversationId");
+  }
+
+  const conversation = getConversation(task.conversationId);
+
   const messages: Message[] = [
+    ...conversation.messages,
     {
       role: "system",
-      content: `An event has occurred: ${JSON.stringify(event)} Determine what Nova should do in response.`
+      content: `A scheduled event has occurred: ${JSON.stringify(event)}. Determine what Nova should do in response.`
     }
   ];
 
-  const response = await runAgent(messages);
+  const response = await runAgent(
+    messages,
+    task.conversationId
+  );
+
+  //add generated message to the conversation messages so nova knnows it exists later
+  for (const generatedMessage of response.messages) {
+  addMessage(task.conversationId, generatedMessage);
+  }
 
   logger("Nova Decided:", response);
 
-  return response;
+  return {
+    ...response,
+    conversationId: task.conversationId
+  };
 }
 
 //runs the LLM Agent loop with tools

@@ -41,7 +41,7 @@ export async function generateResponse(messages: Message[]): Promise<ModelRespon
     throw new Error(`Ollama request failed: ${response.status}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as { message: ModelResponse}
 
   return data.message;
 }

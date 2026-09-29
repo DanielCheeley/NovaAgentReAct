@@ -1,4 +1,60 @@
 import { getWeatherDescription } from "./helperFunctions/describeWeatherCodes";
+
+type GeoLocationResult = {
+  name: string;
+  admin1?: string;
+  country?: string;
+  country_code?: string;
+  latitude: number;
+  longitude: number;
+};
+
+type GeoLocationResponse = {
+  results?: GeoLocationResult[];
+};
+
+type WeatherResponse = {
+  current: {
+    temperature_2m: number;
+    relative_humidity_2m: number;
+    apparent_temperature: number;
+    weather_code: number;
+    wind_speed_10m: number;
+    wind_direction_10m: number;
+  };
+};
+
+function normalizeName(name: string) {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[.'’-]/g, "")
+    .replace(/\bsaint\b/g, "st")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function matchesLocation(
+  result: GeoLocationResult,
+  location: string,
+  state?: string,
+  country?: string
+) {
+  const locationMatches =
+    normalizeName(result.name) === normalizeName(location);
+
+  const stateMatches =
+    !state ||
+    normalizeName(result.admin1 ?? "") === normalizeName(state);
+
+  const countryMatches =
+    !country ||
+    normalizeName(result.country ?? "") === normalizeName(country);
+
+  return locationMatches && stateMatches && countryMatches;
+}
+
 export async function getWeather({
   location,
   state,
@@ -8,15 +64,12 @@ export async function getWeather({
   state?: string;
   country?: string;
 }) {
-  // Find requested location coordinates
   try {
-    const searchName = [location, state, country]
-      .filter(Boolean)
-      .join(", ");
-
+    // Search primarily by the location name.
+    // We use state/country later to select the correct result.
     const params = new URLSearchParams({
-      name: searchName,
-      count: "10",
+      name: location,
+      count: "100",
       language: "en",
       format: "json"
     });
@@ -29,7 +82,8 @@ export async function getWeather({
       throw new Error("Failed to find location");
     }
 
-    const geoLocationData = await geoLocationResponse.json();
+    const geoLocationData =
+      await geoLocationResponse.json() as GeoLocationResponse;
 
     if (
       !geoLocationData.results ||
@@ -38,32 +92,26 @@ export async function getWeather({
       throw new Error(`Location not found: ${location}`);
     }
 
-    // Find places that match the requested location and state
-    const candidates = geoLocationData.results.filter(
-      (result: any) =>
-        result.name?.toLowerCase() === location.toLowerCase() &&
-        (!state ||
-          result.admin1?.toLowerCase() === state.toLowerCase())
+    const candidates = geoLocationData.results.filter((result) =>
+      matchesLocation(result, location, state, country)
     );
 
-    // If a state was provided but nothing matched it
+    // No exact location match
     if (candidates.length === 0) {
-      if (state) {
-      throw new Error(
-        `Could not find ${location} in ${state}`
-      );
+      return {
+        status: "not_found",
+        location,
+        state,
+        country
+      };
     }
 
-    throw new Error(`Location not found: ${location}`);
-    }
-
-    // If there are multiple possible locations and
-    // the user didn't provide enough information, ask for clarification
-    if (!state && candidates.length > 1) {
+    // Multiple exact matches means Nova needs more information
+    if (candidates.length > 1) {
       return {
         status: "ambiguous",
         location,
-        options: candidates.slice(0, 5).map((place: any) => ({
+        options: candidates.slice(0, 5).map((place) => ({
           name: place.name,
           state: place.admin1,
           country: place.country
@@ -75,14 +123,20 @@ export async function getWeather({
 
     // Get current weather
     const weatherResponse = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m&temperature_unit=fahrenheit&wind_speed_unit=mph`
+      `https://api.open-meteo.com/v1/forecast?` +
+      `latitude=${place.latitude}` +
+      `&longitude=${place.longitude}` +
+      `&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m` +
+      `&temperature_unit=fahrenheit` +
+      `&wind_speed_unit=mph`
     );
 
     if (!weatherResponse.ok) {
       throw new Error("Failed to get weather");
     }
 
-    const weatherData = await weatherResponse.json();
+    const weatherData =
+      await weatherResponse.json() as WeatherResponse;
 
     return {
       status: "success",
@@ -90,7 +144,9 @@ export async function getWeather({
       temperature: weatherData.current.temperature_2m,
       feelsLike: weatherData.current.apparent_temperature,
       humidity: weatherData.current.relative_humidity_2m,
-      condition: getWeatherDescription(weatherData.current.weather_code),
+      condition: getWeatherDescription(
+        weatherData.current.weather_code
+      ),
       windSpeed: weatherData.current.wind_speed_10m,
       windDirection: weatherData.current.wind_direction_10m
     };
