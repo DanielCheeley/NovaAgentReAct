@@ -1,8 +1,10 @@
-import { completeTask } from "./completeTask";
 import { getWeather } from "./getWeather";
 import { getDateAndTime } from "./getDateAndTime";
 import { getForecast } from "./getForecast";
 import { scheduleTask } from "./scheduleTask";
+import { getTasks } from "./getTasks";
+import { cancelTask } from "./cancelTask";
+import { rescheduleTask } from "./rescheduleTask";
 
 type ToolContext = {
   conversationId?: number;
@@ -10,10 +12,6 @@ type ToolContext = {
 type ToolHandler = (args: Record<string, unknown>, context: ToolContext) => Promise<unknown>;
 
 export const tools: Record<string, ToolHandler> = {
-completeTask: async (args) => {
-    return completeTask({task: args.task as string});
-  },
-
   getWeather: async (args) => {
     return getWeather({location: args.location as string, state: args.state as string | undefined, country: args.country as string | undefined});
   },
@@ -38,27 +36,29 @@ completeTask: async (args) => {
       timezone: args.timezone as string
     });
   },
+  getTasks: async (args, context) => {
+    return getTasks({
+      conversationId: context.conversationId!
+    });
+  },
+  cancelTask: async (args, context) => {
+    return cancelTask({
+      taskId: args.taskId as string,
+      conversationId: context.conversationId!
+    });
+  },
+  rescheduleTask: async (args, context) => {
+    return rescheduleTask({
+      taskId: args.taskId as string,
+      conversationId: context.conversationId!,
+      date: args.date as string,
+      time: args.time as string,
+      timezone: args.timezone as string
+    });
+  },
 };
 
 export const toolDefinitions = [
-  {
-    type: "function",
-    function: {
-      name: "completeTask",
-      description: "Completes a scheduled task.",
-      parameters: {
-        type: "object",
-        properties: {
-          task: {
-            type: "string",
-            description: "The task to complete"
-          }
-        },
-        required: ["task"]
-      }
-    }
-  },
-
   {
     type: "function",
     function: {
@@ -129,7 +129,7 @@ export const toolDefinitions = [
     function: {
       name: "scheduleTask",
       description:
-        "Schedules a task for Nova to handle at a specific future date and time. Use this when the user explicitly asks Nova to remind them, tell them something later, ask them something later, or perform an action at a future time. Do NOT use this for normal questions, explanations, lists, code, or other immediate requests. Before calling this tool, Nova MUST know the exact date, time, and timezone. If the user gives an incomplete or relative time, use getDateAndTime first. Never invent a date or time. Provide the date and time in the user's local timezone. Do not convert the time to UTC. The scheduling system handles timezone conversion. Do not merely tell the user that something is scheduled. The task is not scheduled until this tool is successfully called.",
+        "Schedules an instruction for Nova to execute at a specific future date and time. Use this when the user asks Nova to remind them of something OR asks Nova to perform/check/review something at a future time. This can include actions Nova should perform on its own, such as checking memory, reviewing information, running a tool, or evaluating something later. Before using this tool, Nova MUST know the exact date, time, and timezone. If the user gives a relative or incomplete time, use getDateAndTime first. Never invent the date, time, or timezone. The scheduling system handles timezone conversion.",
       parameters: {
         type: "object",
         properties: {
@@ -155,6 +155,76 @@ export const toolDefinitions = [
           }
         },
         required: ["task", "date", "time", "timezone"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getTasks",
+      description:
+        "Gets the pending scheduled tasks for the current conversation. Use this when the user asks what reminders or scheduled tasks they have, or when you need to identify an existing task before cancelling or modifying it.",
+      parameters: {
+        type: "object",
+        properties: {}
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "cancelTask",
+      description:
+        "Cancels a pending scheduled task in the current conversation. Use getTasks first when the user identifies a task by description rather than task ID. Never invent a task ID.",
+      parameters: {
+        type: "object",
+        properties: {
+          taskId: {
+            type: "string",
+            description:
+              "The ID of the pending task to cancel. Only use a task ID returned by getTasks."
+          }
+        },
+        required: ["taskId"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "rescheduleTask",
+      description:
+        "Changes the scheduled time of an existing pending task. Use getTasks first when the user   identifies a task by description rather than task ID. The task must already exist and be  pending. If the user gives a relative or incomplete time such as 'in 20 minutes', use  getDateAndTime first to determine the current local date, time, and timezone. Never invent the date, time, or timezone. Do not create a new task when rescheduling an existing one.",
+      parameters: {
+        type: "object",
+        properties: {
+          taskId: {
+            type: "string",
+            description:
+              "The ID of the existing pending task to reschedule. Only use a task ID returned by  getTasks or otherwise verified during the current request."
+          },
+          date: {
+            type: "string",
+            description:
+              "The new local calendar date, formatted as YYYY-MM-DD."
+          },
+          time: {
+            type: "string",
+            description:
+              "The new local time, formatted as HH:mm:ss."
+          },
+          timezone: {
+            type: "string",
+            description:
+              "The IANA timezone for the new scheduled time, such as America/Chicago."
+          }
+        },
+        required: [
+          "taskId",
+          "date",
+          "time",
+          "timezone"
+        ]
       }
     }
   }
