@@ -1,17 +1,5 @@
 import { getWeatherDescription } from "./helperFunctions/describeWeatherCodes";
-
-type GeoLocationResult = {
-  name: string;
-  admin1?: string;
-  country?: string;
-  country_code?: string;
-  latitude: number;
-  longitude: number;
-};
-
-type GeoLocationResponse = {
-  results?: GeoLocationResult[];
-};
+import { geocodeLocation } from "./helperFunctions/geocodeLocation";
 
 type WeatherResponse = {
   current: {
@@ -24,37 +12,6 @@ type WeatherResponse = {
   };
 };
 
-function normalizeName(name: string) {
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[.'’-]/g, "")
-    .replace(/\bsaint\b/g, "st")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function matchesLocation(
-  result: GeoLocationResult,
-  location: string,
-  state?: string,
-  country?: string
-) {
-  const locationMatches =
-    normalizeName(result.name) === normalizeName(location);
-
-  const stateMatches =
-    !state ||
-    normalizeName(result.admin1 ?? "") === normalizeName(state);
-
-  const countryMatches =
-    !country ||
-    normalizeName(result.country ?? "") === normalizeName(country);
-
-  return locationMatches && stateMatches && countryMatches;
-}
-
 export async function getWeather({
   location,
   state,
@@ -65,61 +22,19 @@ export async function getWeather({
   country?: string;
 }) {
   try {
-    // Search primarily by the location name.
-    // We use state/country later to select the correct result.
-    const params = new URLSearchParams({
-      name: location,
-      count: "100",
-      language: "en",
-      format: "json"
+    // Find the requested location
+    const locationResult = await geocodeLocation({
+      location,
+      state,
+      country
     });
 
-    const geoLocationResponse = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?${params}`
-    );
-
-    if (!geoLocationResponse.ok) {
-      throw new Error("Failed to find location");
+    // Location could not be resolved
+    if (locationResult.status !== "success") {
+      return locationResult;
     }
 
-    const geoLocationData =
-      await geoLocationResponse.json() as GeoLocationResponse;
-
-    if (
-      !geoLocationData.results ||
-      geoLocationData.results.length === 0
-    ) {
-      throw new Error(`Location not found: ${location}`);
-    }
-
-    const candidates = geoLocationData.results.filter((result) =>
-      matchesLocation(result, location, state, country)
-    );
-
-    // No exact location match
-    if (candidates.length === 0) {
-      return {
-        status: "not_found",
-        location,
-        state,
-        country
-      };
-    }
-
-    // Multiple exact matches means Nova needs more information
-    if (candidates.length > 1) {
-      return {
-        status: "ambiguous",
-        location,
-        options: candidates.slice(0, 5).map((place) => ({
-          name: place.name,
-          state: place.admin1,
-          country: place.country
-        }))
-      };
-    }
-
-    const place = candidates[0];
+    const place = locationResult.place;
 
     // Get current weather
     const weatherResponse = await fetch(
