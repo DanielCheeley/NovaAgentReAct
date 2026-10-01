@@ -63,7 +63,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "getWeather",
-      description: "Gets weather from a specific location.",
+      description:
+        "Gets the current weather for a specific location. If the tool returns an ambiguous result, ask the user which location they mean. If it returns not_found, tell the user the location could not be found and ask them to clarify. Do not repeatedly call the tool with the same location when it returns ambiguous or not_found.",
       parameters: {
         type: "object",
         properties: {
@@ -89,7 +90,8 @@ export const toolDefinitions = [
   type: "function",
     function: {
       name: "getForecast",
-      description: "Gets the weather forecast for a location.",
+      description:
+        "Gets the weather forecast for a specific location. If the tool returns an ambiguous result, ask the user which location they mean. If it returns not_found, tell the user the location could not be found and ask them to clarify. Do not repeatedly call the tool with the same location when it returns ambiguous or not_found.",
       parameters: {
         type: "object",
         properties: {
