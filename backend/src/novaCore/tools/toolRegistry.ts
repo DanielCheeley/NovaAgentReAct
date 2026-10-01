@@ -33,7 +33,9 @@ completeTask: async (args) => {
     return scheduleTask({
       conversationId: context.conversationId!,
       task: args.task as string,
-      runAt: args.runAt as string
+      date: args.date as string,
+      time: args.time as string,
+      timezone: args.timezone as string
     });
   },
 };
@@ -125,22 +127,32 @@ export const toolDefinitions = [
     function: {
       name: "scheduleTask",
       description:
-        "Schedules a task for Nova to handle at a specific future date and time. Use this when the user explicitly asksNova  to remind them, tell them something later, ask them something later, or perform an action at a future time.Do NOT use   this for normal questions, explanations, lists, code, or other immediate requests. Schedules a task for a specific future date and time. Before calling this tool, Nova MUST know the exact date, time, and timezone. If the user gives an incomplete or relative time, use getDateAndTime first. Never invent a date or time. Do not merely tell the user that something is scheduled. The task is not scheduled until this tool is successfully called.",
+        "Schedules a task for Nova to handle at a specific future date and time. Use this when the user explicitly asks Nova to remind them, tell them something later, ask them something later, or perform an action at a future time. Do NOT use this for normal questions, explanations, lists, code, or other immediate requests. Before calling this tool, Nova MUST know the exact date, time, and timezone. If the user gives an incomplete or relative time, use getDateAndTime first. Never invent a date or time. Provide the date and time in the user's local timezone. Do not convert the time to UTC. The scheduling system handles timezone conversion. Do not merely tell the user that something is scheduled. The task is not scheduled until this tool is successfully called.",
       parameters: {
         type: "object",
         properties: {
           task: {
             type: "string",
             description:
-            "What Nova should do or say when the task becomes due."
+              "What Nova should do or say when the task becomes due."
           },
-          runAt: {
+          date: {
             type: "string",
             description:
-              "The exact future date and time when the task should become due, formatted as an ISO 8601 timestamp."
+              "The exact local calendar date when the task should become due, formatted as YYYY-MM-DD."
+          },
+          time: {
+            type: "string",
+            description:
+              "The exact local time when the task should become due, formatted as HH:mm:ss."
+          },
+          timezone: {
+            type: "string",
+            description:
+              "The IANA timezone for the scheduled time, such as America/Chicago."
           }
         },
-        required: ["task", "runAt"]
+        required: ["task", "date", "time", "timezone"]
       }
     }
   }

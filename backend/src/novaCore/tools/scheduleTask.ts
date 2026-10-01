@@ -1,21 +1,35 @@
 import { randomUUID } from "node:crypto";
+import { Temporal } from "@js-temporal/polyfill";
+
 import { addTask } from "../tasks/taskStore";
 import { ScheduledTask } from "../../types/taskTypes";
 
 export async function scheduleTask({
   conversationId,
   task,
-  runAt
+  date,
+  time,
+  timezone
 }: {
   conversationId: number;
   task: string;
-  runAt: string;
+  date: string;
+  time: string;
+  timezone: string;
 }) {
+  const zonedDateTime = Temporal.ZonedDateTime.from(
+  `${date}T${time}[${timezone}]`
+);
+
+  const runAt = new Date(
+    zonedDateTime.epochMilliseconds
+  );
+
   const scheduledTask: ScheduledTask = {
     id: randomUUID(),
     conversationId,
     task,
-    runAt: new Date(runAt),
+    runAt,
     status: "pending"
   };
 
@@ -26,7 +40,7 @@ export async function scheduleTask({
     taskId: scheduledTask.id,
     task: scheduledTask.task,
     runAt: scheduledTask.runAt.toISOString(),
-    localRunAt: scheduledTask.runAt.toLocaleString("en-US"),
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    localRunAt: zonedDateTime.toString(),
+    timezone
   };
 }
