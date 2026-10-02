@@ -16,7 +16,8 @@ export async function chatController(
 
     res.status(200).json({
       conversationId,
-      message: agentResponse
+      message: agentResponse,
+      title: agentResponse.title
     });
   } catch (error) {
     next(error);

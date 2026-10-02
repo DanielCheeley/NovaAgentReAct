@@ -7,6 +7,7 @@ import { healthRouter } from "./routes/health";
 import { chatRouter } from "./routes/chat";
 import { errorHandler } from "./middleware/errorHandler";
 import "./novaCore/events/novaEventHandler"
+import "./database/database";
 import { startScheduler } from "./novaCore/tasks/scheduler";
 import { startWebSocketServer, sendToClients } from "./communication/websocket";
 

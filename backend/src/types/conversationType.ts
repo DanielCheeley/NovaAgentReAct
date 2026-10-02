@@ -10,5 +10,6 @@ export type Message = {
 
 export type Conversation = {
   id: number;
+  title: string;
   messages: Message[];
 };

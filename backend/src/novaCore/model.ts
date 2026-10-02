@@ -45,3 +45,52 @@ export async function generateResponse(messages: Message[]): Promise<ModelRespon
 
   return data.message;
 }
+
+export async function generateConversationTitle(
+  message: string
+): Promise<string> {
+  const response = await fetch(MODEL_CONFIG.url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: MODEL_CONFIG.model,
+
+      messages: [
+        {
+          role: "system",
+          content:
+            "Generate a short title for a conversation based on the user's message. " +
+            "Return only the title. Keep it between 2 and 6 words. " +
+            "Do not use quotation marks."
+        },
+        {
+          role: "user",
+          content: message
+        }
+      ],
+
+      stream: false,
+      think: false,
+
+      options: {
+        temperature: 0.3
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Ollama title request failed: ${response.status}`
+    );
+  }
+
+  const data = await response.json() as {
+    message: {
+      content: string;
+    };
+  };
+
+  return data.message.content.trim();
+}

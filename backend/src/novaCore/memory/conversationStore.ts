@@ -5,6 +5,7 @@ const conversations = new Map<number, Conversation>();
 export function createConversation(conversationId: number): Conversation {
   const conversation: Conversation = {
     id: conversationId,
+    title: "New Conversation",
     messages: []
   };
 

@@ -1,5 +1,5 @@
 import debug from "debug";
-import { generateResponse } from "./model";
+import { generateResponse, generateConversationTitle  } from "./model";
 import { getConversation, addMessage } from "./memory/conversationStore";
 import { Message } from "../types/conversationType";
 import { NovaEvent } from "../types/eventType";
@@ -12,27 +12,43 @@ export async function handleMessage(
   conversationId: number,
   message: string
 ) {
+  const conversation = getConversation(conversationId);
+
+  const isNewConversation =
+    conversation.title === "New Conversation";
+
   addMessage(conversationId, {
     role: "user",
     content: message
   });
 
-  const conversation = getConversation(conversationId);
+  logger("Nova received:", { conversationId, message });
 
-  logger("Nova received:", {conversationId, message});
+  if (isNewConversation) {
+    const title = await generateConversationTitle(message);
 
-  const messages = [...conversation.messages];
+    conversation.title = title;
+
+    logger("Nova generated conversation title:", title);
+  }
+
+  const updatedConversation = getConversation(conversationId);
+
+  const messages = [...updatedConversation.messages];
 
   const result = await runAgent(messages, conversationId);
 
-  //save everything generated during this agent request
-  for(const generatedMessage of result.messages) {
-    addMessage(conversationId, generatedMessage)
+  // save everything generated during this agent request
+  for (const generatedMessage of result.messages) {
+    addMessage(conversationId, generatedMessage);
   }
 
   logger("Nova Responded:", result);
 
-  return result.response;
+  return {
+    response: result.response,
+    title: getConversation(conversationId).title
+  }
 }
 
 //handle for a recived event
