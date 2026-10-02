@@ -1,19 +1,23 @@
-//import nessicary modules
+// import necessary modules
 import { useEffect, useRef, useState } from "react";
-import type { Conversation } from "./types/chat.ts"
+import type { Conversation } from "./types/chat.ts";
+import { connectWebSocket, disconnectWebSocket, setWebSocketMessageHandler } from "./communication/websocket";
 import "./App.css";
 
-//import components
+// import components
 import Sidebar from "./components/Sidebar";
 import MessageList from "./components/MessageList";
 import MessageInput from "./components/MessageInput";
 
 function App() {
-  //referances to the textarea and messages container
+  //set up variables
+  // references to the textarea and messages container
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<HTMLElement>(null);
 
-  //state for the message input and the list of messages
+  const [activeConversationId, setActiveConversationId] = useState(1);
+
+  // state for the message input and conversations
   const [message, setMessage] = useState("");
   const [conversations, setConversations] = useState<Conversation[]>([
     {
@@ -23,12 +27,56 @@ function App() {
     }
   ]);
 
-  const [activeConversationId, setActiveConversationId] = useState(1);
-  const activeConversation = conversations.find ((conversation) => conversation.id === activeConversationId);
+  const activeConversation = conversations.find(
+    (conversation) => conversation.id === activeConversationId
+  );
 
-  const [generatingConversationIds, setGeneratingConversationIds] = useState<Set<number>>(new Set());
+  const [generatingConversationIds, setGeneratingConversationIds] =
+    useState<Set<number>>(new Set());
 
-  //create new conversation
+
+  //set up websocket connection
+  useEffect(() => {
+  connectWebSocket();
+
+  return () => {
+    disconnectWebSocket();
+  };
+}, []);
+
+useEffect(() => {
+  setWebSocketMessageHandler((data) => {
+    if (data.type !== "nova.message") {
+      return;
+    }
+
+    setConversations((currentConversations) => {
+      return currentConversations.map((conversation) => {
+        //used for active conversation(might be useful later idk)
+        // if (conversation.id !== activeConversationId) {
+        //   return conversation;
+        // }
+        if (conversation.id !== data.conversationId) {
+          return conversation;
+        }
+
+        return {
+          ...conversation,
+          messages: [
+            ...conversation.messages,
+            {
+              sender: "nova",
+              text: data.message
+            }
+          ]
+        };
+      });
+    });
+  });
+}, [activeConversationId]);
+
+
+  // create new conversation
   const createNewConversation = () => {
     const newConversation: Conversation = {
       id: Date.now(),
@@ -36,11 +84,40 @@ function App() {
       messages: []
     };
 
-    setConversations((previousConversations) => [ newConversation, ...previousConversations]);
-    setActiveConversationId(newConversation.id);
-  }
+    setConversations((previousConversations) => [
+      newConversation,
+      ...previousConversations
+    ]);
 
-  //scroll to bottom after sending message
+    setActiveConversationId(newConversation.id);
+  };
+
+  // update a conversation and move it to the top
+  const updateConversation = (
+    conversationId: number,
+    update: (conversation: Conversation) => Conversation
+  ) => {
+    setConversations((previousConversations) => {
+      const conversation = previousConversations.find(
+        (conversation) => conversation.id === conversationId
+      );
+
+      if (!conversation) {
+        return previousConversations;
+      }
+
+      const updatedConversation = update(conversation);
+
+      return [
+        updatedConversation,
+        ...previousConversations.filter(
+          (conversation) => conversation.id !== conversationId
+        )
+      ];
+    });
+  };
+
+  // scroll to bottom when messages change
   useEffect(() => {
     const messagesContainer = messagesRef.current;
 
@@ -51,7 +128,7 @@ function App() {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }, [activeConversation?.messages]);
 
-  //sends a message to a new array with previous messages
+  // send message
   const sendMessage = async () => {
     if (message.trim() === "") {
       return;
@@ -60,42 +137,33 @@ function App() {
     const conversationId = activeConversationId;
     const userMessage = message;
 
+    // mark conversation as generating
     setGeneratingConversationIds((previousIds) => {
       const newIds = new Set(previousIds);
       newIds.add(conversationId);
       return newIds;
     });
 
-    //sets the new array
-    setConversations((previousConversations) => {
-      const conversation = previousConversations.find((conversation) => conversation.id === conversationId);
+    // add user message and move conversation to top
+    updateConversation(conversationId, (conversation) => ({
+      ...conversation,
+      messages: [
+        ...conversation.messages,
+        {
+          sender: "user",
+          text: userMessage
+        }
+      ]
+    }));
 
-      if (!conversation) {
-        return previousConversations;
-      }
-
-      const updatedConversation = {
-          ...conversation, messages: [...conversation.messages,
-            {
-              sender: "user" as const,
-              text: message
-            }
-          ]
-        };
-      return [
-        updatedConversation, ...previousConversations.filter((conversation) => conversation.id !== activeConversationId)
-      ];
-    });
-
-    //clears message box
+    // clear message box
     setMessage("");
 
-    //resets the height to normal after sending message
+    // reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
 
-    //simulates a delay for Nova's response and respond with a set message
     try {
       const response = await fetch("http://localhost:3000/chat", {
         method: "POST",
@@ -108,31 +176,41 @@ function App() {
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`Nova backend returned ${response.status}`);
+      }
+
       const data = await response.json();
 
       console.log(data);
-    
-      setConversations((previousConversations) =>
-        previousConversations.map((conversation) => {
-          if (conversation.id !== conversationId) {
-            return conversation;
+
+      // add Nova response and move conversation to top
+      updateConversation(conversationId, (conversation) => ({
+        ...conversation,
+        messages: [
+          ...conversation.messages,
+          {
+            sender: "nova",
+            text: data.message
           }
-        
-          return {
-            ...conversation,
-            messages: [
-              ...conversation.messages,
-              {
-                sender: "nova" as const,
-                text: data.message
-              }
-            ]
-          };
-        })
-      );
+        ]
+      }));
     } catch (error) {
       console.error("Failed to contact Nova backend:", error);
+
+      // add error message and move conversation to top
+      updateConversation(conversationId, (conversation) => ({
+        ...conversation,
+        messages: [
+          ...conversation.messages,
+          {
+            sender: "nova",
+            text: "Sorry, I'm having trouble connecting to my server."
+          }
+        ]
+      }));
     } finally {
+      // mark conversation as finished generating
       setGeneratingConversationIds((previousIds) => {
         const newIds = new Set(previousIds);
         newIds.delete(conversationId);
@@ -141,8 +219,7 @@ function App() {
     }
   };
 
-
-  //the acual web page
+  // actual web page
   return (
     <div className="app">
       <Sidebar

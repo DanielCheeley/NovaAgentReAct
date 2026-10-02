@@ -1,14 +1,14 @@
 import express from "express";
 import cors from 'cors'
 import debug from "debug";
+import { createServer } from "node:http";
 import { logRequest } from "./middleware/logger";
 import { healthRouter } from "./routes/health";
 import { chatRouter } from "./routes/chat";
 import { errorHandler } from "./middleware/errorHandler";
 import "./novaCore/events/novaEventHandler"
 import { startScheduler } from "./novaCore/tasks/scheduler";
-
-startScheduler();
+import { startWebSocketServer, sendToClients } from "./communication/websocket";
 
 //create a logger instance for the server
 const logger = debug('NovaAgent:server');
@@ -28,6 +28,13 @@ app.use('/chat', chatRouter);
 //error handler must be after routes
 app.use(errorHandler)
 
-app.listen(PORT, () => {
+//create and start the server for websocket connection with client
+const server = createServer(app);
+
+//set up services
+startWebSocketServer(server)
+startScheduler();
+
+server.listen(PORT, () => {
   logger(`Nova backend running on http://localhost:${PORT}`);
 })
