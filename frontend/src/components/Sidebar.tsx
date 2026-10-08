@@ -2,7 +2,7 @@ import type { Conversation } from "../types/chat.ts"
 
 type SidebarProps = {
     conversations: Conversation[];
-    activeConversationId: number;
+    activeConversationId: number | null;
     onSelectConversation: (id: number) => void;
     onNewConversation: () => void;
   };

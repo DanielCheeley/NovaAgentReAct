@@ -15,17 +15,12 @@ function App() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<HTMLElement>(null);
 
-  const [activeConversationId, setActiveConversationId] = useState(1);
+  const [activeConversationId, setActiveConversationId] =
+  useState<number | null>(null);
 
   // state for the message input and conversations
   const [message, setMessage] = useState("");
-  const [conversations, setConversations] = useState<Conversation[]>([
-    {
-      id: 1,
-      title: "New Conversation",
-      messages: []
-    }
-  ]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
 
   const activeConversation = conversations.find(
     (conversation) => conversation.id === activeConversationId
@@ -65,8 +60,8 @@ useEffect(() => {
           messages: [
             ...conversation.messages,
             {
-              sender: "nova",
-              text: data.message
+              role: "assistant",
+              content: data.message
             }
           ]
         };
@@ -75,6 +70,49 @@ useEffect(() => {
   });
 }, [activeConversationId]);
 
+
+useEffect(() => {
+  async function loadConversations() {
+    try {
+      const response = await fetch(
+        "http://localhost:3000/conversations"
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Nova backend returned ${response.status}`
+        );
+      }
+
+      const data: Conversation[] = await response.json();
+
+      const visibleConversations = data.map((conversation) => ({
+        ...conversation,
+        messages: conversation.messages.filter(
+          (message) =>
+            message.role === "user" ||
+            (
+              message.role === "assistant" &&
+              message.content.trim() !== ""
+            )
+        )
+      }));
+
+      setConversations(visibleConversations);
+
+      if (visibleConversations.length > 0) {
+        setActiveConversationId(visibleConversations[0].id);
+      }
+    } catch (error) {
+      console.error(
+        "Failed to load conversations:",
+        error
+      );
+    }
+  }
+
+  loadConversations();
+}, []);
 
   // create new conversation
   const createNewConversation = () => {
@@ -134,6 +172,10 @@ useEffect(() => {
       return;
     }
 
+    if (activeConversationId === null) {
+      return;
+    }
+
     const conversationId = activeConversationId;
     const userMessage = message;
 
@@ -150,8 +192,8 @@ useEffect(() => {
       messages: [
         ...conversation.messages,
         {
-          sender: "user",
-          text: userMessage
+          role: "user",
+          content: userMessage
         }
       ]
     }));
@@ -195,8 +237,8 @@ useEffect(() => {
         messages: [
           ...conversation.messages,
           {
-            sender: "nova",
-            text: data.message
+            role: "assistant",
+            content: data.message
           }
         ]
       }));
@@ -209,8 +251,8 @@ useEffect(() => {
         messages: [
           ...conversation.messages,
           {
-            sender: "nova",
-            text: "Sorry, I'm having trouble connecting to my server."
+            role: "assistant",
+            content: "Sorry, I'm having trouble connecting to my server."
           }
         ]
       }));
@@ -243,7 +285,10 @@ useEffect(() => {
         <MessageList
           messages={activeConversation?.messages ?? []}
           messagesRef={messagesRef}
-          isGenerating={generatingConversationIds.has(activeConversationId)}
+          isGenerating={
+            activeConversationId !== null &&
+            generatingConversationIds.has(activeConversationId)
+          }
         />
 
         <MessageInput

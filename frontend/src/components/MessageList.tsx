@@ -2,11 +2,7 @@ import type { RefObject } from "react";
 import ReactMarkdown from "react-markdown"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-
-type Message = {
-  sender: "user" | "nova";
-  text: string;
-};
+import type { Message } from "../types/chat";
 
 type MessageListProps = {
   messages: Message[];
@@ -27,7 +23,7 @@ function MessageList({ messages, messagesRef, isGenerating }: MessageListProps) 
           {messages.map((message, index) => (
             <div
               className={
-                message.sender === "user"
+                message.role === "user"
                   ? "user-message"
                   : "nova-message"
               }
@@ -54,7 +50,7 @@ function MessageList({ messages, messagesRef, isGenerating }: MessageListProps) 
                   },
                 }}
               >
-                {message.text}
+                {message.content}
               </ReactMarkdown>
               {/* was <ReactMarkdown>{message.text}</ReactMarkdown> but swithced for code readablity*/}
             </div>
