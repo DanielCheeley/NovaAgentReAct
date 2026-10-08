@@ -92,9 +92,13 @@ export async function handleEvent(event: NovaEvent) {
 }
 
 //runs the LLM Agent loop with tools
-async function runAgent(messages: Message[], conversationId?: number) {
+async function runAgent(
+  messages: Message[],
+  conversationId?: number
+) {
   const MAX_LOOPS = 5;
   const generatedMessages: Message[] = [];
+  const executedTools = new Set<string>();
 
   for (let i = 0; i < MAX_LOOPS; i++) {
     const response = await generateResponse(messages);
@@ -103,44 +107,151 @@ async function runAgent(messages: Message[], conversationId?: number) {
       const assistantMessage: Message = {
         role: "assistant",
         content: response.content
-      }
+      };
 
-      messages.push(assistantMessage)
-      generatedMessages.push(assistantMessage)
+      messages.push(assistantMessage);
+      generatedMessages.push(assistantMessage);
 
       return {
         response: response.content,
         messages: generatedMessages
+      };
+    }
+
+    // Make sure every requested tool exists.
+    for (const toolCall of response.tool_calls) {
+      const toolName = toolCall.function.name;
+
+      if (!tools[toolName]) {
+        throw new Error(`Unknown tool: ${toolName}`);
       }
     }
 
-    const toolCallMessage: Message = {
-      role: "assistant",
-      content: response.content ?? "",
-      tool_calls: response.tool_calls
-    }
-
-    messages.push(toolCallMessage)
-    generatedMessages.push(toolCallMessage)
+    // Check whether any requested tools have prerequisites
+    // that have not been run yet.
+    const missingPrerequisites = new Set<string>();
 
     for (const toolCall of response.tool_calls) {
       const toolName = toolCall.function.name;
       const tool = tools[toolName];
 
-      if (!tool) {
-        throw new Error(`Unknown tool: ${toolName}`);
+      for (const requirement of tool.requires ?? []) {
+        if (!executedTools.has(requirement)) {
+          missingPrerequisites.add(requirement);
+        }
+      }
+    }
+
+    // Run missing prerequisites before allowing the requested
+    // tools to execute.
+    if (missingPrerequisites.size > 0) {
+      for (const prerequisite of missingPrerequisites) {
+        const tool = tools[prerequisite];
+
+        if (!tool) {
+          throw new Error(
+            `Unknown prerequisite tool: ${prerequisite}`
+          );
+        }
+
+        logger(
+          "Nova must use prerequisite tool:",
+          prerequisite
+        );
+
+        const prerequisiteCallId =
+          `prerequisite-${prerequisite}-${Date.now()}`;
+
+        const prerequisiteCallMessage: Message = {
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            {
+              id: prerequisiteCallId,
+              function: {
+                index: 0,
+                name: prerequisite,
+                arguments: {}
+              }
+            }
+          ]
+        };
+
+        messages.push(prerequisiteCallMessage);
+        generatedMessages.push(prerequisiteCallMessage);
+
+        let result;
+
+        try {
+          result = await tool.execute(
+            {},
+            { conversationId }
+          );
+        } catch (error) {
+          result = {
+            success: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "unknown tool error"
+          };
+        }
+
+        logger(
+          "Prerequisite result:",
+          result
+        );
+
+        const prerequisiteResult: Message = {
+          role: "tool",
+          tool_call_id: prerequisiteCallId,
+          tool_name: prerequisite,
+          content: JSON.stringify(result)
+        };
+
+        messages.push(prerequisiteResult);
+        generatedMessages.push(prerequisiteResult);
+
+        executedTools.add(prerequisite);
       }
 
-      logger("nova is using tool:", toolName)
-      
+      // Do NOT execute the original tool call yet.
+      // Give the model another chance to see the prerequisite
+      // results and generate correct arguments.
+      continue;
+    }
+
+    // All prerequisites have been satisfied.
+    // Now it is safe to execute the model's requested tools.
+    const toolCallMessage: Message = {
+      role: "assistant",
+      content: response.content ?? "",
+      tool_calls: response.tool_calls
+    };
+
+    messages.push(toolCallMessage);
+    generatedMessages.push(toolCallMessage);
+
+    for (const toolCall of response.tool_calls) {
+      const toolName = toolCall.function.name;
+      const tool = tools[toolName];
+
+      logger("Nova is using tool:", toolName);
+
       let result;
 
       try {
-      result = await tool(toolCall.function.arguments, {conversationId});
-      } catch(error) {
+        result = await tool.execute(
+          toolCall.function.arguments,
+          { conversationId }
+        );
+      } catch (error) {
         result = {
           success: false,
-          error: error instanceof Error ? error.message : "unknown tool error"
+          error:
+            error instanceof Error
+              ? error.message
+              : "unknown tool error"
         };
       }
 
@@ -151,12 +262,16 @@ async function runAgent(messages: Message[], conversationId?: number) {
         tool_call_id: toolCall.id,
         tool_name: toolName,
         content: JSON.stringify(result)
-      }
+      };
 
       messages.push(toolMessage);
-      generatedMessages.push(toolMessage)
+      generatedMessages.push(toolMessage);
+
+      executedTools.add(toolName);
     }
   }
 
-  throw new Error("Nova exceeded the maximum number of loops.");
+  throw new Error(
+    "Nova exceeded the maximum number of loops."
+  );
 }
