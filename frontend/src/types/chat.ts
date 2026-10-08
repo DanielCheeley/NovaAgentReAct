@@ -1,6 +1,6 @@
 export type Message = {
-  sender: "user" | "nova";
-  text: string;
+  role: "user" | "assistant";
+  content: string;
 };
 
 export type Conversation = {

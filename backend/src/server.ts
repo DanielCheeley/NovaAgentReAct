@@ -5,8 +5,10 @@ import { createServer } from "node:http";
 import { logRequest } from "./middleware/logger";
 import { healthRouter } from "./routes/health";
 import { chatRouter } from "./routes/chat";
+import { conversationsRouter } from "./routes/conversations";
 import { errorHandler } from "./middleware/errorHandler";
 import "./novaCore/events/novaEventHandler"
+import "./database/database";
 import { startScheduler } from "./novaCore/tasks/scheduler";
 import { startWebSocketServer, sendToClients } from "./communication/websocket";
 
@@ -24,6 +26,7 @@ app.use(express.json());// allows express to parse JSON reqest bodies
 //set up routes
 app.use('/health', healthRouter);
 app.use('/chat', chatRouter);
+app.use("/conversations", conversationsRouter);
 
 //error handler must be after routes
 app.use(errorHandler)
