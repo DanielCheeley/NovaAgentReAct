@@ -106,6 +106,13 @@
   background: #3a3a3a;
   color: white;
 }
+
+/*show delete button on keyboard focus not just mouse hover*/
+.conversation:focus-within .delete-conversation-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* Chat */
 
 .chat-container {
