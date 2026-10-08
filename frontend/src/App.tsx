@@ -180,13 +180,18 @@ useEffect(() => {
         throw new Error(`Nova backend returned ${response.status}`);
       }
 
-      const data = await response.json();
+      const data: {
+        conversationId: number;
+        message: string;
+        title: string;
+      } = await response.json();
 
       console.log(data);
 
       // add Nova response and move conversation to top
       updateConversation(conversationId, (conversation) => ({
         ...conversation,
+        title: data.title,
         messages: [
           ...conversation.messages,
           {
