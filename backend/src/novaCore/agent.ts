@@ -1,6 +1,6 @@
 import debug from "debug";
 import { generateResponse, generateConversationTitle  } from "./model";
-import { getConversation, addMessage } from "./memory/conversationStore";
+import { getConversation, addMessage, updateConversationTitle } from "./memory/conversationStore";
 import { Message } from "../types/conversationType";
 import { NovaEvent } from "../types/eventType";
 import { tools } from "./tools/toolRegistry";
@@ -27,7 +27,7 @@ export async function handleMessage(
   if (isNewConversation) {
     const title = await generateConversationTitle(message);
 
-    conversation.title = title;
+    updateConversationTitle(conversationId, title)
 
     logger("Nova generated conversation title:", title);
   }
