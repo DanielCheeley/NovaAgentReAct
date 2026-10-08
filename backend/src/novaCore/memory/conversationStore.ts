@@ -189,3 +189,26 @@ export function getConversations(): Conversation[] {
 
   return rows.map(rowToConversation);
 }
+
+export function deleteConversation(
+  conversationId: number
+): void {
+  const deleteTransaction = db.transaction(() => {
+    db.prepare(`
+      DELETE FROM messages
+      WHERE conversation_id = ?
+    `).run(conversationId);
+
+    db.prepare(`
+      DELETE FROM tasks
+      WHERE conversation_id = ?
+    `).run(conversationId);
+
+    db.prepare(`
+      DELETE FROM conversations
+      WHERE id = ?
+    `).run(conversationId);
+  });
+
+  deleteTransaction();
+}

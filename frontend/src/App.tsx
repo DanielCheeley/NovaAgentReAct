@@ -155,6 +155,43 @@ useEffect(() => {
     });
   };
 
+  // delete a conversation
+  const deleteConversation = async (conversationId: number) => {
+  try {
+    const response = await fetch(
+      `http://localhost:3000/conversations/${conversationId}`,
+      {
+        method: "DELETE"
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Nova backend returned ${response.status}`
+      );
+    }
+
+    setConversations((previousConversations) => {
+      const remainingConversations =
+        previousConversations.filter(
+          (conversation) => conversation.id !== conversationId
+        );
+
+      if (activeConversationId === conversationId) {
+        setActiveConversationId(
+          remainingConversations[0]?.id ?? null
+        );
+      }
+
+      return remainingConversations;
+    });
+  } catch (error) {
+    console.error(
+      "Failed to delete conversation:",
+      error
+    );
+  }
+};
   // scroll to bottom when messages change
   useEffect(() => {
     const messagesContainer = messagesRef.current;
@@ -274,6 +311,7 @@ useEffect(() => {
         activeConversationId={activeConversationId}
         onSelectConversation={setActiveConversationId}
         onNewConversation={createNewConversation}
+        onDeleteConversation={deleteConversation}
       />
 
       <main className="chat-container">

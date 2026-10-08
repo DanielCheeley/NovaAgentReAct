@@ -47,22 +47,65 @@
   text-transform: uppercase;
 }
 
+/* Conversation row */
 .conversation {
+  display: flex;
+  align-items: center;
   width: 100%;
+  border-radius: 8px;
+  background: transparent;
+}
+
+/* Conversation title */
+.conversation-button {
+  flex: 1;
+  min-width: 0;
   padding: 10px;
   border: none;
-  border-radius: 8px;
   background: transparent;
   color: #ccc;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+/* Selected conversation */
 .conversation.active {
   background: #292929;
+}
+
+.conversation.active .conversation-button {
   color: white;
 }
 
+/* Delete button */
+.delete-conversation-button {
+  width: 32px;
+  height: 32px;
+  margin-right: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #777;
+  font-size: 18px;
+  cursor: pointer;
+
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.conversation:hover .delete-conversation-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.delete-conversation-button:hover {
+  background: #3a3a3a;
+  color: white;
+}
 /* Chat */
 
 .chat-container {
