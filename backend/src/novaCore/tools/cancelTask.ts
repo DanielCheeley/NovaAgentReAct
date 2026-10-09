@@ -7,15 +7,13 @@ export async function cancelTask({
   taskId: string;
   conversationId: number;
 }) {
-  const cancelled = cancelStoredTask(
-    taskId,
-    conversationId
-  );
+  const cancelled = cancelStoredTask(taskId, conversationId);
 
   if (!cancelled) {
     return {
       success: false,
-      error: "Task was not found, is already completed/cancelled, or does not belong to this conversation."
+      error:
+        "Task was not found, is already completed/cancelled, or does not belong to this conversation."
     };
   }
 

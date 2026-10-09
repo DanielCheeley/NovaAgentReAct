@@ -19,10 +19,10 @@ type MessageRow = {
   tool_calls: string | null;
 };
 
-function rowToConversation(
-  row: ConversationRow
-): Conversation {
-  const messageRows = db.prepare(`
+function rowToConversation(row: ConversationRow): Conversation {
+  const messageRows = db
+    .prepare(
+      `
     SELECT
       id,
       conversation_id,
@@ -35,7 +35,9 @@ function rowToConversation(
     FROM messages
     WHERE conversation_id = ?
     ORDER BY id ASC
-  `).all(row.id) as MessageRow[];
+  `
+    )
+    .all(row.id) as MessageRow[];
 
   return {
     id: row.id,
@@ -56,12 +58,11 @@ function rowToConversation(
   };
 }
 
-export function createConversation(
-  conversationId: number
-): Conversation {
+export function createConversation(conversationId: number): Conversation {
   const now = new Date().toISOString();
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO conversations (
       id,
       title,
@@ -69,12 +70,8 @@ export function createConversation(
       updated_at
     )
     VALUES (?, ?, ?, ?)
-  `).run(
-    conversationId,
-    "New Conversation",
-    now,
-    now
-  );
+  `
+  ).run(conversationId, "New Conversation", now, now);
 
   return {
     id: conversationId,
@@ -83,10 +80,10 @@ export function createConversation(
   };
 }
 
-export function getConversation(
-  conversationId: number
-): Conversation {
-  let row = db.prepare(`
+export function getConversation(conversationId: number): Conversation {
+  let row = db
+    .prepare(
+      `
     SELECT
       id,
       title,
@@ -94,12 +91,16 @@ export function getConversation(
       updated_at
     FROM conversations
     WHERE id = ?
-  `).get(conversationId) as ConversationRow | undefined;
+  `
+    )
+    .get(conversationId) as ConversationRow | undefined;
 
   if (!row) {
     createConversation(conversationId);
 
-    row = db.prepare(`
+    row = db
+      .prepare(
+        `
       SELECT
         id,
         title,
@@ -107,21 +108,21 @@ export function getConversation(
         updated_at
       FROM conversations
       WHERE id = ?
-    `).get(conversationId) as ConversationRow;
+    `
+      )
+      .get(conversationId) as ConversationRow;
   }
 
   return rowToConversation(row);
 }
 
-export function addMessage(
-  conversationId: number,
-  message: Message
-): void {
+export function addMessage(conversationId: number, message: Message): void {
   getConversation(conversationId);
 
   const now = new Date().toISOString();
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO messages (
       conversation_id,
       role,
@@ -140,23 +141,24 @@ export function addMessage(
       @toolName,
       @toolCalls
     )
-  `).run({
+  `
+  ).run({
     conversationId,
     role: message.role,
     content: message.content,
     createdAt: now,
     toolCallId: message.tool_call_id ?? null,
     toolName: message.tool_name ?? null,
-    toolCalls: message.tool_calls
-      ? JSON.stringify(message.tool_calls)
-      : null
+    toolCalls: message.tool_calls ? JSON.stringify(message.tool_calls) : null
   });
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE conversations
     SET updated_at = ?
     WHERE id = ?
-  `).run(now, conversationId);
+  `
+  ).run(now, conversationId);
 }
 
 export function updateConversationTitle(
@@ -165,19 +167,19 @@ export function updateConversationTitle(
 ): void {
   const now = new Date().toISOString();
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE conversations
     SET title = ?, updated_at = ?
     WHERE id = ?
-  `).run(
-    title,
-    now,
-    conversationId
-  );
+  `
+  ).run(title, now, conversationId);
 }
 
 export function getConversations(): Conversation[] {
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT
       id,
       title,
@@ -185,29 +187,35 @@ export function getConversations(): Conversation[] {
       updated_at
     FROM conversations
     ORDER BY updated_at DESC
-  `).all() as ConversationRow[];
+  `
+    )
+    .all() as ConversationRow[];
 
   return rows.map(rowToConversation);
 }
 
-export function deleteConversation(
-  conversationId: number
-): void {
+export function deleteConversation(conversationId: number): void {
   const deleteTransaction = db.transaction(() => {
-    db.prepare(`
+    db.prepare(
+      `
       DELETE FROM messages
       WHERE conversation_id = ?
-    `).run(conversationId);
+    `
+    ).run(conversationId);
 
-    db.prepare(`
+    db.prepare(
+      `
       DELETE FROM tasks
       WHERE conversation_id = ?
-    `).run(conversationId);
+    `
+    ).run(conversationId);
 
-    db.prepare(`
+    db.prepare(
+      `
       DELETE FROM conversations
       WHERE id = ?
-    `).run(conversationId);
+    `
+    ).run(conversationId);
   });
 
   deleteTransaction();

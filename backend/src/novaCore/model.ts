@@ -4,8 +4,9 @@ import { Message } from "../types/conversationType";
 import { toolDefinitions } from "./tools/toolRegistry";
 import { ModelResponse } from "../types/modelResponseType";
 
-
-export async function generateResponse(messages: Message[]): Promise<ModelResponse> {
+export async function generateResponse(
+  messages: Message[]
+): Promise<ModelResponse> {
   const response = await fetch(MODEL_CONFIG.url, {
     method: "POST",
     headers: {
@@ -23,7 +24,7 @@ export async function generateResponse(messages: Message[]): Promise<ModelRespon
         },
         ...messages
       ],
-      
+
       //gets all of the defined tools and how to use them
       tools: toolDefinitions,
 
@@ -41,7 +42,7 @@ export async function generateResponse(messages: Message[]): Promise<ModelRespon
     throw new Error(`Ollama request failed: ${response.status}`);
   }
 
-  const data = await response.json() as { message: ModelResponse}
+  const data = (await response.json()) as { message: ModelResponse };
 
   return data.message;
 }
@@ -81,12 +82,10 @@ export async function generateConversationTitle(
   });
 
   if (!response.ok) {
-    throw new Error(
-      `Ollama title request failed: ${response.status}`
-    );
+    throw new Error(`Ollama title request failed: ${response.status}`);
   }
 
-  const data = await response.json() as {
+  const data = (await response.json()) as {
     message: {
       content: string;
     };

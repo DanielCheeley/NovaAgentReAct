@@ -111,7 +111,8 @@ export const toolDefinitions = [
           },
           state: {
             type: "string",
-            description: "The state, province, or region of the location, if known"
+            description:
+              "The state, province, or region of the location, if known"
           },
           country: {
             type: "string",
@@ -173,8 +174,7 @@ export const toolDefinitions = [
         properties: {
           task: {
             type: "string",
-            description:
-              "What Nova should do or say when the task becomes due."
+            description: "What Nova should do or say when the task becomes due."
           },
           date: {
             type: "string",
@@ -246,13 +246,11 @@ export const toolDefinitions = [
           },
           date: {
             type: "string",
-            description:
-              "The new local calendar date, formatted as YYYY-MM-DD."
+            description: "The new local calendar date, formatted as YYYY-MM-DD."
           },
           time: {
             type: "string",
-            description:
-              "The new local time, formatted as HH:mm:ss."
+            description: "The new local time, formatted as HH:mm:ss."
           },
           timezone: {
             type: "string",
@@ -260,12 +258,7 @@ export const toolDefinitions = [
               "The IANA timezone for the new scheduled time, such as America/Chicago."
           }
         },
-        required: [
-          "taskId",
-          "date",
-          "time",
-          "timezone"
-        ]
+        required: ["taskId", "date", "time", "timezone"]
       }
     }
   }

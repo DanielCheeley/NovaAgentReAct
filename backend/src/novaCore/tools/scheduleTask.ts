@@ -18,12 +18,10 @@ export async function scheduleTask({
   timezone: string;
 }) {
   const zonedDateTime = Temporal.ZonedDateTime.from(
-  `${date}T${time}[${timezone}]`
-);
-
-  const runAt = new Date(
-    zonedDateTime.epochMilliseconds
+    `${date}T${time}[${timezone}]`
   );
+
+  const runAt = new Date(zonedDateTime.epochMilliseconds);
 
   const scheduledTask: ScheduledTask = {
     id: randomUUID(),

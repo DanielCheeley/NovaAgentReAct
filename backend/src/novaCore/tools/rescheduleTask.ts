@@ -18,15 +18,9 @@ export async function rescheduleTask({
     `${date}T${time}[${timezone}]`
   );
 
-  const runAt = new Date(
-    zonedDateTime.epochMilliseconds
-  );
+  const runAt = new Date(zonedDateTime.epochMilliseconds);
 
-  const rescheduled = rescheduleStoredTask(
-    taskId,
-    conversationId,
-    runAt
-  );
+  const rescheduled = rescheduleStoredTask(taskId, conversationId, runAt);
 
   if (!rescheduled) {
     return {

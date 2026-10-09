@@ -6,4 +6,4 @@ export const MODEL_CONFIG = {
   think: false,
 
   stream: false
-}
+};

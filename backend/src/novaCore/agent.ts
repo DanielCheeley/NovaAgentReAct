@@ -1,6 +1,10 @@
 import debug from "debug";
-import { generateResponse, generateConversationTitle  } from "./model";
-import { getConversation, addMessage, updateConversationTitle } from "./memory/conversationStore";
+import { generateResponse, generateConversationTitle } from "./model";
+import {
+  getConversation,
+  addMessage,
+  updateConversationTitle
+} from "./memory/conversationStore";
 import { Message } from "../types/conversationType";
 import { NovaEvent } from "../types/eventType";
 import { tools } from "./tools/toolRegistry";
@@ -8,14 +12,10 @@ import { tools } from "./tools/toolRegistry";
 const logger = debug("NovaAgent:Agent");
 
 //handle for a recived message
-export async function handleMessage(
-  conversationId: number,
-  message: string
-) {
+export async function handleMessage(conversationId: number, message: string) {
   const conversation = getConversation(conversationId);
 
-  const isNewConversation =
-    conversation.title === "New Conversation";
+  const isNewConversation = conversation.title === "New Conversation";
 
   addMessage(conversationId, {
     role: "user",
@@ -27,7 +27,7 @@ export async function handleMessage(
   if (isNewConversation) {
     const title = await generateConversationTitle(message);
 
-    updateConversationTitle(conversationId, title)
+    updateConversationTitle(conversationId, title);
 
     logger("Nova generated conversation title:", title);
   }
@@ -48,7 +48,7 @@ export async function handleMessage(
   return {
     response: result.response,
     title: getConversation(conversationId).title
-  }
+  };
 }
 
 //handle for a recived event
@@ -73,14 +73,11 @@ export async function handleEvent(event: NovaEvent) {
     }
   ];
 
-  const response = await runAgent(
-    messages,
-    task.conversationId
-  );
+  const response = await runAgent(messages, task.conversationId);
 
   //add generated message to the conversation messages so nova knnows it exists later
   for (const generatedMessage of response.messages) {
-  addMessage(task.conversationId, generatedMessage);
+    addMessage(task.conversationId, generatedMessage);
   }
 
   logger("Nova Decided:", response);
@@ -92,10 +89,7 @@ export async function handleEvent(event: NovaEvent) {
 }
 
 //runs the LLM Agent loop with tools
-async function runAgent(
-  messages: Message[],
-  conversationId?: number
-) {
+async function runAgent(messages: Message[], conversationId?: number) {
   const MAX_LOOPS = 5;
   const generatedMessages: Message[] = [];
   const executedTools = new Set<string>();
@@ -149,18 +143,12 @@ async function runAgent(
         const tool = tools[prerequisite];
 
         if (!tool) {
-          throw new Error(
-            `Unknown prerequisite tool: ${prerequisite}`
-          );
+          throw new Error(`Unknown prerequisite tool: ${prerequisite}`);
         }
 
-        logger(
-          "Nova must use prerequisite tool:",
-          prerequisite
-        );
+        logger("Nova must use prerequisite tool:", prerequisite);
 
-        const prerequisiteCallId =
-          `prerequisite-${prerequisite}-${Date.now()}`;
+        const prerequisiteCallId = `prerequisite-${prerequisite}-${Date.now()}`;
 
         const prerequisiteCallMessage: Message = {
           role: "assistant",
@@ -180,27 +168,21 @@ async function runAgent(
         messages.push(prerequisiteCallMessage);
         generatedMessages.push(prerequisiteCallMessage);
 
-        let result;
+        let result: unknown = {
+          success: false,
+          error: "Prerequisite did not complete"
+        };
 
         try {
-          result = await tool.execute(
-            {},
-            { conversationId }
-          );
+          result = await tool.execute({}, { conversationId });
         } catch (error) {
           result = {
             success: false,
-            error:
-              error instanceof Error
-                ? error.message
-                : "unknown tool error"
+            error: error instanceof Error ? error.message : "Unknown tool error"
           };
         }
 
-        logger(
-          "Prerequisite result:",
-          result
-        );
+        logger("Prerequisite result:", result);
 
         const prerequisiteResult: Message = {
           role: "tool",
@@ -211,6 +193,19 @@ async function runAgent(
 
         messages.push(prerequisiteResult);
         generatedMessages.push(prerequisiteResult);
+
+        // Treat explicit failure results as failures, too.
+        const prerequisiteFailed =
+          typeof result === "object" &&
+          result !== null &&
+          "success" in result &&
+          result.success === false;
+
+        if (prerequisiteFailed) {
+          throw new Error(
+            `Cannot continue because prerequisite "${prerequisite}" failed.`
+          );
+        }
 
         executedTools.add(prerequisite);
       }
@@ -241,17 +236,13 @@ async function runAgent(
       let result;
 
       try {
-        result = await tool.execute(
-          toolCall.function.arguments,
-          { conversationId }
-        );
+        result = await tool.execute(toolCall.function.arguments, {
+          conversationId
+        });
       } catch (error) {
         result = {
           success: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "unknown tool error"
+          error: error instanceof Error ? error.message : "unknown tool error"
         };
       }
 
@@ -271,7 +262,5 @@ async function runAgent(
     }
   }
 
-  throw new Error(
-    "Nova exceeded the maximum number of loops."
-  );
+  throw new Error("Nova exceeded the maximum number of loops.");
 }

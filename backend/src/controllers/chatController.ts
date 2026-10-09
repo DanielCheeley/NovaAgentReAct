@@ -9,10 +9,7 @@ export async function chatController(
   try {
     const { conversationId, message } = req.body;
 
-    const agentResponse = await handleMessage(
-      conversationId,
-      message
-    )
+    const agentResponse = await handleMessage(conversationId, message);
 
     res.status(200).json({
       conversationId,
