@@ -11,7 +11,7 @@ import { tools } from "./tools/toolRegistry";
 
 const logger = debug("NovaAgent:Agent");
 
-//handle for a recived message
+// Handle a received message.
 export async function handleMessage(conversationId: number, message: string) {
   const conversation = getConversation(conversationId);
 
@@ -33,17 +33,16 @@ export async function handleMessage(conversationId: number, message: string) {
   }
 
   const updatedConversation = getConversation(conversationId);
-
   const messages = [...updatedConversation.messages];
 
   const result = await runAgent(messages, conversationId);
 
-  // save everything generated during this agent request
+  // Save everything generated during this agent request.
   for (const generatedMessage of result.messages) {
     addMessage(conversationId, generatedMessage);
   }
 
-  logger("Nova Responded:", result);
+  logger("Nova responded:", result);
 
   return {
     response: result.response,
@@ -51,7 +50,7 @@ export async function handleMessage(conversationId: number, message: string) {
   };
 }
 
-//handle for a recived event
+// Handle a received event.
 export async function handleEvent(event: NovaEvent) {
   logger("Nova handling event:", event);
 
@@ -75,12 +74,12 @@ export async function handleEvent(event: NovaEvent) {
 
   const response = await runAgent(messages, task.conversationId);
 
-  //add generated message to the conversation messages so nova knnows it exists later
+  // Save generated messages so Nova knows about them later.
   for (const generatedMessage of response.messages) {
     addMessage(task.conversationId, generatedMessage);
   }
 
-  logger("Nova Decided:", response);
+  logger("Nova decided:", response);
 
   return {
     ...response,
@@ -88,7 +87,7 @@ export async function handleEvent(event: NovaEvent) {
   };
 }
 
-//runs the LLM Agent loop with tools
+// Run the LLM agent loop with tools.
 async function runAgent(messages: Message[], conversationId?: number) {
   const MAX_LOOPS = 5;
   const generatedMessages: Message[] = [];
@@ -97,17 +96,17 @@ async function runAgent(messages: Message[], conversationId?: number) {
   for (let i = 0; i < MAX_LOOPS; i++) {
     const response = await generateResponse(messages);
 
-    if (!response.tool_calls) {
+    if (!response.tool_calls || response.tool_calls.length === 0) {
       const assistantMessage: Message = {
         role: "assistant",
-        content: response.content
+        content: response.content ?? ""
       };
 
       messages.push(assistantMessage);
       generatedMessages.push(assistantMessage);
 
       return {
-        response: response.content,
+        response: assistantMessage.content,
         messages: generatedMessages
       };
     }
@@ -121,8 +120,7 @@ async function runAgent(messages: Message[], conversationId?: number) {
       }
     }
 
-    // Check whether any requested tools have prerequisites
-    // that have not been run yet.
+    // Find prerequisites that have not run yet.
     const missingPrerequisites = new Set<string>();
 
     for (const toolCall of response.tool_calls) {
@@ -136,9 +134,10 @@ async function runAgent(messages: Message[], conversationId?: number) {
       }
     }
 
-    // Run missing prerequisites before allowing the requested
-    // tools to execute.
+    // Run missing prerequisites before the requested tools.
     if (missingPrerequisites.size > 0) {
+      let prerequisiteFailed = false;
+
       for (const prerequisite of missingPrerequisites) {
         const tool = tools[prerequisite];
 
@@ -168,10 +167,7 @@ async function runAgent(messages: Message[], conversationId?: number) {
         messages.push(prerequisiteCallMessage);
         generatedMessages.push(prerequisiteCallMessage);
 
-        let result: unknown = {
-          success: false,
-          error: "Prerequisite did not complete"
-        };
+        let result: unknown;
 
         try {
           result = await tool.execute({}, { conversationId });
@@ -194,30 +190,49 @@ async function runAgent(messages: Message[], conversationId?: number) {
         messages.push(prerequisiteResult);
         generatedMessages.push(prerequisiteResult);
 
-        // Treat explicit failure results as failures, too.
-        const prerequisiteFailed =
+        // Detect an explicit failure result.
+        const failed =
           typeof result === "object" &&
           result !== null &&
           "success" in result &&
           result.success === false;
 
-        if (prerequisiteFailed) {
-          throw new Error(
-            `Cannot continue because prerequisite "${prerequisite}" failed.`
+        if (failed) {
+          prerequisiteFailed = true;
+
+          messages.push({
+            role: "system",
+            content:
+              `The prerequisite tool "${prerequisite}" failed. ` +
+              `Its result was: ${JSON.stringify(result)}. ` +
+              `Do not execute any dependent tools. ` +
+              `Explain the problem to the user and, if possible, ` +
+              `suggest a reasonable next step.`
+          });
+
+          logger(
+            "Prerequisite failed; skipping dependent tools:",
+            prerequisite
           );
+
+          break;
         }
 
         executedTools.add(prerequisite);
       }
 
-      // Do NOT execute the original tool call yet.
-      // Give the model another chance to see the prerequisite
-      // results and generate correct arguments.
+      // Do not execute the original tool calls after a prerequisite
+      // fails. Let the model respond to the failure first.
+      if (prerequisiteFailed) {
+        continue;
+      }
+
+      // Let the model retry its original request with the prerequisite
+      // results available in context.
       continue;
     }
 
-    // All prerequisites have been satisfied.
-    // Now it is safe to execute the model's requested tools.
+    // All prerequisites are satisfied. Execute the requested tools.
     const toolCallMessage: Message = {
       role: "assistant",
       content: response.content ?? "",
@@ -233,7 +248,7 @@ async function runAgent(messages: Message[], conversationId?: number) {
 
       logger("Nova is using tool:", toolName);
 
-      let result;
+      let result: unknown;
 
       try {
         result = await tool.execute(toolCall.function.arguments, {
@@ -242,7 +257,7 @@ async function runAgent(messages: Message[], conversationId?: number) {
       } catch (error) {
         result = {
           success: false,
-          error: error instanceof Error ? error.message : "unknown tool error"
+          error: error instanceof Error ? error.message : "Unknown tool error"
         };
       }
 
