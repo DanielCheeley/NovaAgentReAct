@@ -47,29 +47,39 @@ export function addTask(task: ScheduledTask): void {
 }
 
 export function getPendingTasks(): ScheduledTask[] {
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT *
     FROM tasks
     WHERE status = 'pending'
-  `).all() as TaskRow[];
+  `
+    )
+    .all() as TaskRow[];
 
   return rows.map(rowToTask);
 }
 
 export function completeTask(taskId: string): void {
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE tasks
     SET status = 'completed'
     WHERE id = ?
-  `).run(taskId);
+  `
+  ).run(taskId);
 }
 
 export function getTask(taskId: string): ScheduledTask | undefined {
-  const row = db.prepare(`
+  const row = db
+    .prepare(
+      `
     SELECT *
     FROM tasks
     WHERE id = ?
-  `).get(taskId) as TaskRow | undefined;
+  `
+    )
+    .get(taskId) as TaskRow | undefined;
 
   if (!row) {
     return undefined;
@@ -78,17 +88,18 @@ export function getTask(taskId: string): ScheduledTask | undefined {
   return rowToTask(row);
 }
 
-export function cancelTask(
-  taskId: string,
-  conversationId: number
-): boolean {
-  const result = db.prepare(`
+export function cancelTask(taskId: string, conversationId: number): boolean {
+  const result = db
+    .prepare(
+      `
     UPDATE tasks
     SET status = 'cancelled'
     WHERE id = ?
       AND conversation_id = ?
       AND status = 'pending'
-  `).run(taskId, conversationId);
+  `
+    )
+    .run(taskId, conversationId);
 
   return result.changes > 0;
 }
@@ -98,17 +109,17 @@ export function rescheduleTask(
   conversationId: number,
   runAt: Date
 ): boolean {
-  const result = db.prepare(`
+  const result = db
+    .prepare(
+      `
     UPDATE tasks
     SET run_at = ?
     WHERE id = ?
       AND conversation_id = ?
       AND status = 'pending'
-  `).run(
-    runAt.toISOString(),
-    taskId,
-    conversationId
-  );
+  `
+    )
+    .run(runAt.toISOString(), taskId, conversationId);
 
   return result.changes > 0;
 }
@@ -116,12 +127,16 @@ export function rescheduleTask(
 export function getPendingTasksForConversation(
   conversationId: number
 ): ScheduledTask[] {
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT *
     FROM tasks
     WHERE conversation_id = ?
       AND status = 'pending'
-  `).all(conversationId) as TaskRow[];
+  `
+    )
+    .all(conversationId) as TaskRow[];
 
   return rows.map(rowToTask);
 }

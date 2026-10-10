@@ -1,21 +1,24 @@
 import debug from "debug";
-import { generateResponse, generateConversationTitle  } from "./model";
-import { getConversation, addMessage, updateConversationTitle } from "./memory/conversationStore";
+import { generateConversationTitle } from "./model";
+import {
+  getConversation,
+  addMessage,
+  updateConversationTitle
+} from "./memory/conversationStore";
 import { Message } from "../types/conversationType";
 import { NovaEvent } from "../types/eventType";
-import { tools } from "./tools/toolRegistry";
+import { runAgent } from "./agentLoop";
+
+// Preserve the existing entry point for callers.
+export { runAgent } from "./agentLoop";
 
 const logger = debug("NovaAgent:Agent");
 
-//handle for a recived message
-export async function handleMessage(
-  conversationId: number,
-  message: string
-) {
+// Handle a received message.
+export async function handleMessage(conversationId: number, message: string) {
   const conversation = getConversation(conversationId);
 
-  const isNewConversation =
-    conversation.title === "New Conversation";
+  const isNewConversation = conversation.title === "New Conversation";
 
   addMessage(conversationId, {
     role: "user",
@@ -27,31 +30,30 @@ export async function handleMessage(
   if (isNewConversation) {
     const title = await generateConversationTitle(message);
 
-    updateConversationTitle(conversationId, title)
+    updateConversationTitle(conversationId, title);
 
     logger("Nova generated conversation title:", title);
   }
 
   const updatedConversation = getConversation(conversationId);
-
   const messages = [...updatedConversation.messages];
 
   const result = await runAgent(messages, conversationId);
 
-  // save everything generated during this agent request
+  // Save everything generated during this agent request.
   for (const generatedMessage of result.messages) {
     addMessage(conversationId, generatedMessage);
   }
 
-  logger("Nova Responded:", result);
+  logger("Nova responded:", result);
 
   return {
     response: result.response,
     title: getConversation(conversationId).title
-  }
+  };
 }
 
-//handle for a recived event
+// Handle a received event.
 export async function handleEvent(event: NovaEvent) {
   logger("Nova handling event:", event);
 
@@ -73,90 +75,17 @@ export async function handleEvent(event: NovaEvent) {
     }
   ];
 
-  const response = await runAgent(
-    messages,
-    task.conversationId
-  );
+  const response = await runAgent(messages, task.conversationId);
 
-  //add generated message to the conversation messages so nova knnows it exists later
+  // Save generated messages so Nova knows about them later.
   for (const generatedMessage of response.messages) {
-  addMessage(task.conversationId, generatedMessage);
+    addMessage(task.conversationId, generatedMessage);
   }
 
-  logger("Nova Decided:", response);
+  logger("Nova decided:", response);
 
   return {
     ...response,
     conversationId: task.conversationId
   };
-}
-
-//runs the LLM Agent loop with tools
-async function runAgent(messages: Message[], conversationId?: number) {
-  const MAX_LOOPS = 5;
-  const generatedMessages: Message[] = [];
-
-  for (let i = 0; i < MAX_LOOPS; i++) {
-    const response = await generateResponse(messages);
-
-    if (!response.tool_calls) {
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: response.content
-      }
-
-      messages.push(assistantMessage)
-      generatedMessages.push(assistantMessage)
-
-      return {
-        response: response.content,
-        messages: generatedMessages
-      }
-    }
-
-    const toolCallMessage: Message = {
-      role: "assistant",
-      content: response.content ?? "",
-      tool_calls: response.tool_calls
-    }
-
-    messages.push(toolCallMessage)
-    generatedMessages.push(toolCallMessage)
-
-    for (const toolCall of response.tool_calls) {
-      const toolName = toolCall.function.name;
-      const tool = tools[toolName];
-
-      if (!tool) {
-        throw new Error(`Unknown tool: ${toolName}`);
-      }
-
-      logger("nova is using tool:", toolName)
-      
-      let result;
-
-      try {
-      result = await tool(toolCall.function.arguments, {conversationId});
-      } catch(error) {
-        result = {
-          success: false,
-          error: error instanceof Error ? error.message : "unknown tool error"
-        };
-      }
-
-      logger("Tool result:", result);
-
-      const toolMessage: Message = {
-        role: "tool",
-        tool_call_id: toolCall.id,
-        tool_name: toolName,
-        content: JSON.stringify(result)
-      }
-
-      messages.push(toolMessage);
-      generatedMessages.push(toolMessage)
-    }
-  }
-
-  throw new Error("Nova exceeded the maximum number of loops.");
 }

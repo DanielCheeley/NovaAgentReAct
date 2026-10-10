@@ -1,3 +1,5 @@
+import { BACKEND_URL } from "./api";
+
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let shouldReconnect = false;
@@ -11,7 +13,7 @@ type NovaWebSocketMessage = {
 let messageHandler: ((message: NovaWebSocketMessage) => void) | null = null;
 
 export function setWebSocketMessageHandler(
-  handler: (message: NovaWebSocketMessage) => void
+  handler: ((message: NovaWebSocketMessage) => void) | null
 ) {
   messageHandler = handler;
 }
@@ -31,15 +33,17 @@ function connect() {
     return;
   }
 
-  const newSocket = new WebSocket("ws://localhost:3000");
+  const newSocket = new WebSocket(BACKEND_URL.replace(/^http/, "ws"));
 
   socket = newSocket;
 
   newSocket.onopen = () => {
+    if (socket !== newSocket) return;
     console.log("Connected to Nova WebSocket");
   };
 
   newSocket.onmessage = (event) => {
+    if (socket !== newSocket) return;
     const data = JSON.parse(event.data);
 
     console.log("Nova WebSocket message:", data);
@@ -48,15 +52,16 @@ function connect() {
   };
 
   newSocket.onerror = (error) => {
+    if (socket !== newSocket) return;
     console.error("WebSocket error:", error);
   };
 
   newSocket.onclose = () => {
-    console.log("Nova WebSocket disconnected");
-
     if (socket !== newSocket) {
       return;
     }
+
+    console.log("Nova WebSocket disconnected");
 
     socket = null;
 

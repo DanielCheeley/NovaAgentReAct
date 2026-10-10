@@ -61,27 +61,23 @@ export async function getForecast({
       throw new Error("Failed to get forecast");
     }
 
-    const forecastData =
-      await forecastResponse.json() as ForecastResponse;
+    const forecastData = (await forecastResponse.json()) as ForecastResponse;
 
     return {
       status: "success",
       location: `${place.name}, ${place.admin1 ?? place.country}`,
 
-      forecast: forecastData.daily.time.map(
-        (date, index) => ({
-          date,
-          condition: getWeatherDescription(
-            forecastData.daily.weather_code[index]
-          ),
-          high: forecastData.daily.temperature_2m_max[index],
-          low: forecastData.daily.temperature_2m_min[index],
-          precipitationProbability:
-            forecastData.daily.precipitation_probability_max[index],
-          maxWindSpeed:
-            forecastData.daily.wind_speed_10m_max[index]
-        })
-      )
+      forecast: forecastData.daily.time.map((date, index) => ({
+        date,
+        condition: getWeatherDescription(
+          forecastData.daily.weather_code[index]
+        ),
+        high: forecastData.daily.temperature_2m_max[index],
+        low: forecastData.daily.temperature_2m_min[index],
+        precipitationProbability:
+          forecastData.daily.precipitation_probability_max[index],
+        maxWindSpeed: forecastData.daily.wind_speed_10m_max[index]
+      }))
     };
   } catch (error) {
     console.error("forecast fetch error:", error);

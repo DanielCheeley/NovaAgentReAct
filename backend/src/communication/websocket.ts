@@ -1,8 +1,8 @@
 import { WebSocketServer, WebSocket } from "ws";
-import { Server } from "node:http"
+import { Server } from "node:http";
 import debug from "debug";
 
-const logger = debug("NovaAgent:Websocket")
+const logger = debug("NovaAgent:Websocket");
 
 const clients = new Set<WebSocket>();
 

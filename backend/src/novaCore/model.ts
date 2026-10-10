@@ -1,62 +1,49 @@
 import { MODEL_CONFIG } from "./novaConfig";
 import { NOVA_SYSTEM_PROMPT } from "./novaPrompt";
 import { Message } from "../types/conversationType";
-import { toolDefinitions } from "./tools/toolRegistry";
+import { toolDefinitions } from "./tools/toolDefinitions";
 import { ModelResponse } from "../types/modelResponseType";
 
+type ModelRequest = {
+  messages: Message[];
+  tools?: typeof toolDefinitions;
+  stream: boolean;
+  think: boolean;
+  options: { temperature: number };
+};
 
-export async function generateResponse(messages: Message[]): Promise<ModelResponse> {
+async function requestModel(
+  request: ModelRequest,
+  errorLabel: string
+): Promise<ModelResponse> {
   const response = await fetch(MODEL_CONFIG.url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      //gets the used model
-      model: MODEL_CONFIG.model,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: MODEL_CONFIG.model, ...request })
+  });
+  if (!response.ok) throw new Error(`${errorLabel}: ${response.status}`);
+  const data = (await response.json()) as { message: ModelResponse };
+  return data.message;
+}
 
-      //gets the system prompt and all previous messages
-      messages: [
-        {
-          role: "system",
-          content: NOVA_SYSTEM_PROMPT
-        },
-        ...messages
-      ],
-      
-      //gets all of the defined tools and how to use them
+export function generateResponse(messages: Message[]): Promise<ModelResponse> {
+  return requestModel(
+    {
+      messages: [{ role: "system", content: NOVA_SYSTEM_PROMPT }, ...messages],
       tools: toolDefinitions,
-
-      //gets the modelconfig settings
       stream: MODEL_CONFIG.stream,
       think: MODEL_CONFIG.think,
-
-      options: {
-        temperature: MODEL_CONFIG.temperature
-      }
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Ollama request failed: ${response.status}`);
-  }
-
-  const data = await response.json() as { message: ModelResponse}
-
-  return data.message;
+      options: { temperature: MODEL_CONFIG.temperature }
+    },
+    "Ollama request failed"
+  );
 }
 
 export async function generateConversationTitle(
   message: string
 ): Promise<string> {
-  const response = await fetch(MODEL_CONFIG.url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: MODEL_CONFIG.model,
-
+  const response = await requestModel(
+    {
       messages: [
         {
           role: "system",
@@ -65,32 +52,13 @@ export async function generateConversationTitle(
             "Return only the title. Keep it between 2 and 6 words. " +
             "Do not use quotation marks."
         },
-        {
-          role: "user",
-          content: message
-        }
+        { role: "user", content: message }
       ],
-
       stream: false,
       think: false,
-
-      options: {
-        temperature: 0.3
-      }
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `Ollama title request failed: ${response.status}`
-    );
-  }
-
-  const data = await response.json() as {
-    message: {
-      content: string;
-    };
-  };
-
-  return data.message.content.trim();
+      options: { temperature: 0.3 }
+    },
+    "Ollama title request failed"
+  );
+  return response.content.trim();
 }

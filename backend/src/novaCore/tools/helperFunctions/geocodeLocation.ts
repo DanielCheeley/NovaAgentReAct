@@ -32,12 +32,10 @@ function matchesLocation(
     normalizeName(result.name) === normalizeName(location);
 
   const stateMatches =
-    !state ||
-    normalizeName(result.admin1 ?? "") === normalizeName(state);
+    !state || normalizeName(result.admin1 ?? "") === normalizeName(state);
 
   const countryMatches =
-    !country ||
-    normalizeName(result.country ?? "") === normalizeName(country);
+    !country || normalizeName(result.country ?? "") === normalizeName(country);
 
   return locationMatches && stateMatches && countryMatches;
 }
@@ -66,8 +64,7 @@ export async function geocodeLocation({
     throw new Error("Failed to find location");
   }
 
-  const data =
-    await response.json() as GeoLocationResponse;
+  const data = (await response.json()) as GeoLocationResponse;
 
   if (!data.results || data.results.length === 0) {
     return {

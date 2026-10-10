@@ -1,5 +1,8 @@
 import { Router } from "express";
-import { deleteConversation, getConversations } from "../novaCore/memory/conversationStore";
+import {
+  deleteConversation,
+  getConversations
+} from "../novaCore/memory/conversationStore";
 
 export const conversationsRouter = Router();
 

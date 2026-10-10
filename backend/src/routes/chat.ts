@@ -3,4 +3,4 @@ import { chatController } from "../controllers/chatController";
 
 export const chatRouter = Router();
 
-chatRouter.post("/", chatController)
+chatRouter.post("/", chatController);

@@ -4,4 +4,4 @@ export type ScheduledTask = {
   task: string;
   runAt: Date;
   status: "pending" | "completed" | "cancelled";
-}
+};

@@ -1,7 +1,7 @@
 export async function getDateAndTime() {
   const now = new Date();
 
-  // Get the computer's IANA timezone, such as "America/Chicago". 
+  // Get the computer's IANA timezone, such as "America/Chicago".
   // This tells Nova which timezone the local date and time belong to.
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   // Break the current date and time into individual parts.
@@ -17,8 +17,7 @@ export async function getDateAndTime() {
     hourCycle: "h23"
   }).formatToParts(now);
   // Find a specific part from the formatted date/time. For example, get("year") returns "2026".
-  const get = (type: string) =>
-    parts.find((part) => part.type === type)?.value;
+  const get = (type: string) => parts.find((part) => part.type === type)?.value;
 
   return {
     // Local calendar date in a predictable format: YYYY-MM-DD.
