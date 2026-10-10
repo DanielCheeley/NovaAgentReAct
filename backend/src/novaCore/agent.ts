@@ -89,13 +89,40 @@ export async function handleEvent(event: NovaEvent) {
 }
 
 // Run the LLM agent loop with tools.
-async function runAgent(messages: Message[], conversationId?: number) {
+export async function runAgent(
+  messages: Message[],
+  conversationId?: number,
+  respond = generateResponse
+) {
   const MAX_LOOPS = 5;
   const generatedMessages: Message[] = [];
   const executedTools = new Set<string>();
 
+  function finish(content: string) {
+    const message: Message = { role: "assistant", content };
+    messages.push(message);
+    generatedMessages.push(message);
+    return { response: content, messages: generatedMessages };
+  }
+
+  // Supply fresh clock data even if the model forgets to request it.
+  let clock: ToolResult;
+  try {
+    clock = await tools.getDateAndTime.execute({}, { conversationId });
+  } catch (error) {
+    clock = toolFailure(error);
+  }
+  if (clock.success) executedTools.add("getDateAndTime");
+  // Background context is not a model-requested action or saved chat message.
+  messages.push({
+    role: "system",
+    content: clock.success
+      ? `Background clock context for this request: ${JSON.stringify(clock.data)}. Use it only when the user's request needs the current time or scheduling. Do not announce the time or this check in ordinary conversation. Ignore older timestamps in history.`
+      : "Background clock context is unavailable. Continue ordinary conversation normally; if the request needs current time, call getDateAndTime and do not guess."
+  });
+
   for (let i = 0; i < MAX_LOOPS; i++) {
-    const response = await generateResponse(messages);
+    const response = await respond(messages);
 
     if (!response.tool_calls || response.tool_calls.length === 0) {
       const assistantMessage: Message = {
@@ -117,7 +144,7 @@ async function runAgent(messages: Message[], conversationId?: number) {
       const toolName = toolCall.function.name;
 
       if (!tools[toolName]) {
-        throw new Error(`Unknown tool: ${toolName}`);
+        return finish(`I couldn't complete that request because the tool "${toolName}" isn't available. Please rephrase the request.`);
       }
     }
 
@@ -137,13 +164,11 @@ async function runAgent(messages: Message[], conversationId?: number) {
 
     // Run missing prerequisites before the requested tools.
     if (missingPrerequisites.size > 0) {
-      let prerequisiteFailed = false;
-
       for (const prerequisite of missingPrerequisites) {
         const tool = tools[prerequisite];
 
         if (!tool) {
-          throw new Error(`Unknown prerequisite tool: ${prerequisite}`);
+          return finish(`I couldn't complete that request because the required tool "${prerequisite}" isn't available.`);
         }
 
         logger("Nova must use prerequisite tool:", prerequisite);
@@ -190,33 +215,10 @@ async function runAgent(messages: Message[], conversationId?: number) {
 
         // Detect an explicit failure result.
         if (!result.success) {
-          prerequisiteFailed = true;
-
-          messages.push({
-            role: "system",
-            content:
-              `The prerequisite tool "${prerequisite}" failed. ` +
-              `Its result was: ${JSON.stringify(result)}. ` +
-              `Do not execute any dependent tools. ` +
-              `Explain the problem to the user and, if possible, ` +
-              `suggest a reasonable next step.`
-          });
-
-          logger(
-            "Prerequisite failed; skipping dependent tools:",
-            prerequisite
-          );
-
-          break;
+          return finish(`I couldn't complete that request because ${prerequisite} failed: ${result.error}. Please check the details and try again.`);
         }
 
         executedTools.add(prerequisite);
-      }
-
-      // Do not execute the original tool calls after a prerequisite
-      // fails. Let the model respond to the failure first.
-      if (prerequisiteFailed) {
-        continue;
       }
 
       // Let the model retry its original request with the prerequisite
@@ -234,6 +236,7 @@ async function runAgent(messages: Message[], conversationId?: number) {
     messages.push(toolCallMessage);
     generatedMessages.push(toolCallMessage);
 
+    const failures: string[] = [];
     for (const toolCall of response.tool_calls) {
       const toolName = toolCall.function.name;
       const tool = tools[toolName];
@@ -264,9 +267,17 @@ async function runAgent(messages: Message[], conversationId?: number) {
 
       if (result.success) {
         executedTools.add(toolName);
+      } else {
+        failures.push(`The ${toolName} tool failed: ${result.error}.`);
       }
+    }
+
+    // All requested calls now have results. Stop before the model can
+    // retry failures or describe failed actions as successful.
+    if (failures.length > 0) {
+      return finish(failures.join(" ") + " Any successful actions already completed still apply. Please check the request details before trying again.");
     }
   }
 
-  throw new Error("Nova exceeded the maximum number of loops.");
+  return finish("I reached my tool-step limit before finishing this request. Any successful actions already completed still apply. Please check their results before trying again.");
 }

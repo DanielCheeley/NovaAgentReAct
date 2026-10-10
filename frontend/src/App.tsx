@@ -45,11 +45,9 @@ function App() {
     }
 
     void checkHealth();
-    const interval = setInterval(checkHealth, 5000);
 
     return () => {
       active = false;
-      clearInterval(interval);
       controller?.abort();
     };
   }, []);
