@@ -201,3 +201,43 @@ test("registry preserves explicit cancellation/rescheduling failures", async () 
   assert.equal(cancelled.success, false);
   assert.equal(rescheduled.success, false);
 });
+
+test("unsolicited scheduling is blocked and Nova can still fulfill ordinary work", async () => {
+  let executions = 0;
+  let turns = 0;
+  tools.scheduleTask = { execute: async () => { executions++; return toolSuccess({ taskId: "bad" }); } };
+  const result = await runAgent(
+    [{ role: "user", content: "cool now write it in typescript" }], 1,
+    async (messages) => {
+      if (++turns === 1) return call("scheduleTask");
+      assert.match(messages.at(-1)!.content, /not authorized/);
+      return { content: "Here is the TypeScript function." };
+    }
+  );
+  assert.equal(executions, 0);
+  assert.equal(result.response, "Here is the TypeScript function.");
+});
+
+test("identical scheduling calls reuse success in a batch and later loop steps", async () => {
+  let executions = 0;
+  let turns = 0;
+  tools.scheduleTask = { execute: async () => { executions++; return toolSuccess({ taskId: "only-task" }); } };
+  const schedulingCall = (id: string) => ({
+    id, function: { index: 0, name: "scheduleTask", arguments: {
+      task: "Check build", date: "2030-01-01", time: "15:00:00", timezone: "America/Chicago"
+    } }
+  });
+  const result = await runAgent(
+    [{ role: "user", content: "Remind me to check the build tomorrow" }], 1,
+    async () => ++turns === 1
+      ? { content: "", tool_calls: [schedulingCall("first"), schedulingCall("second")] }
+      : turns === 2
+        ? { content: "", tool_calls: [schedulingCall("third")] }
+        : { content: "Reminder set." }
+  );
+  assert.equal(executions, 1);
+  const results = result.messages.filter((message) => message.role === "tool");
+  assert.equal(results.length, 3);
+  assert.deepEqual(results.map((message) => message.tool_call_id), ["first", "second", "third"]);
+  for (const message of results) assert.equal(JSON.parse(message.content).data.taskId, "only-task");
+});
