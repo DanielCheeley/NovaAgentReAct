@@ -14,9 +14,11 @@ type ModelRequest = {
 
 async function requestModel(
   request: ModelRequest,
-  errorLabel: string
+  errorLabel: string,
+  signal?: AbortSignal
 ): Promise<ModelResponse> {
   const response = await fetch(MODEL_CONFIG.url, {
+    signal,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: MODEL_CONFIG.model, ...request })
@@ -58,7 +60,8 @@ export async function generateConversationTitle(
       think: false,
       options: { temperature: 0.3 }
     },
-    "Ollama title request failed"
+    "Ollama title request failed",
+    AbortSignal.timeout(30_000)
   );
   return response.content.trim();
 }

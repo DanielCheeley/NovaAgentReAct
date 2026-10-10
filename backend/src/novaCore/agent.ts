@@ -1,9 +1,7 @@
 import debug from "debug";
-import { generateConversationTitle } from "./model";
 import {
   getConversation,
-  addMessage,
-  updateConversationTitle
+  addMessage
 } from "./memory/conversationStore";
 import { Message } from "../types/conversationType";
 import { NovaEvent } from "../types/eventType";
@@ -16,24 +14,12 @@ const logger = debug("NovaAgent:Agent");
 
 // Handle a received message.
 export async function handleMessage(conversationId: number, message: string) {
-  const conversation = getConversation(conversationId);
-
-  const isNewConversation = conversation.title === "New Conversation";
-
   addMessage(conversationId, {
     role: "user",
     content: message
   });
 
   logger("Nova received:", { conversationId, message });
-
-  if (isNewConversation) {
-    const title = await generateConversationTitle(message);
-
-    updateConversationTitle(conversationId, title);
-
-    logger("Nova generated conversation title:", title);
-  }
 
   const updatedConversation = getConversation(conversationId);
   const messages = [...updatedConversation.messages];

@@ -14,13 +14,21 @@ export function useChat() {
     setWebSocketMessageHandler((data) => {
       if (
         data.type === "nova.message" &&
-        typeof data.conversationId === "number"
+        typeof data.conversationId === "number" &&
+        typeof data.message === "string"
       ) {
         dispatch({
           type: "message",
           id: data.conversationId,
           message: { role: "assistant", content: data.message }
         });
+      }
+      if (
+        data.type === "conversation.title" &&
+        typeof data.conversationId === "number" &&
+        typeof data.title === "string"
+      ) {
+        dispatch({ type: "title", id: data.conversationId, title: data.title });
       }
     });
     connectWebSocket();

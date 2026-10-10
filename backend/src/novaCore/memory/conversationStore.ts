@@ -194,6 +194,24 @@ export function getConversations(): Conversation[] {
   return rows.map(rowToConversation);
 }
 
+// Read without creating a conversation: deleted chats must stay deleted.
+export function getConversationTitleSeed(conversationId: number): string | undefined {
+  const row = db.prepare(`
+    SELECT m.content FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    WHERE c.id = ? AND c.title = 'New Conversation' AND m.role = 'user'
+    ORDER BY m.id ASC LIMIT 1
+  `).get(conversationId) as { content: string } | undefined;
+  return row?.content;
+}
+
+export function updateUntitledConversation(conversationId: number, title: string): boolean {
+  return db.prepare(`
+    UPDATE conversations SET title = ?
+    WHERE id = ? AND title = 'New Conversation'
+  `).run(title, conversationId).changes === 1;
+}
+
 export function deleteConversation(conversationId: number): void {
   const deleteTransaction = db.transaction(() => {
     db.prepare(
