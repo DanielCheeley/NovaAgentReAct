@@ -18,6 +18,19 @@ function state(): ChatState {
   };
 }
 
+test("background titles preserve messages and survive an older HTTP response", () => {
+  const original = state();
+  const titled = chatReducer(original, { type: "title", id: 1, title: "Greeting" });
+  const replied = chatReducer(titled, {
+    type: "message", id: 1, title: "New Conversation",
+    message: { role: "assistant", content: "Hello" }
+  });
+  assert.equal(replied.conversations[0].title, "Greeting");
+  assert.deepEqual(replied.conversations[0].messages, [{ role: "assistant", content: "Hello" }]);
+  assert.equal(original.conversations[0].title, "One");
+  assert.deepEqual(chatReducer(replied, { type: "title", id: 999, title: "Gone" }), replied);
+});
+
 test("chat loading, creation and selection preserve conversation order", () => {
   const loaded = chatReducer(initialChatState, {
     type: "loaded",

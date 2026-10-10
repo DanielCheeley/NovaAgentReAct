@@ -17,6 +17,7 @@ export type ChatAction =
   | { type: "created"; conversation: Conversation }
   | { type: "selected"; id: number }
   | { type: "deleted"; id: number }
+  | { type: "title"; id: number; title: string }
   | {
       type: "message";
       id: number;
@@ -42,6 +43,15 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case "selected":
       return { ...state, activeConversationId: action.id };
+    case "title":
+      return {
+        ...state,
+        conversations: state.conversations.map((conversation) =>
+          conversation.id === action.id
+            ? { ...conversation, title: action.title }
+            : conversation
+        )
+      };
     case "deleted": {
       const conversations = state.conversations.filter(
         (conversation) => conversation.id !== action.id
@@ -62,7 +72,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       if (!existing) return state;
       const updated = {
         ...existing,
-        title: action.title ?? existing.title,
+        // A title event can arrive before an older HTTP response is handled.
+        title: action.title && action.title !== "New Conversation"
+          ? action.title
+          : existing.title,
         messages: [...existing.messages, action.message]
       };
       return {

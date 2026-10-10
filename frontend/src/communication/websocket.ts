@@ -7,7 +7,8 @@ let shouldReconnect = false;
 type NovaWebSocketMessage = {
   type: string;
   conversationId?: number;
-  message: string;
+  message?: string;
+  title?: string;
 };
 
 let messageHandler: ((message: NovaWebSocketMessage) => void) | null = null;
