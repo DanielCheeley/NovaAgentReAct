@@ -21,6 +21,38 @@ function App() {
   // state for the message input and conversations
   const [message, setMessage] = useState("");
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [isOnline, setIsOnline] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    let controller: AbortController | null = null;
+
+    async function checkHealth() {
+      controller = new AbortController();
+      const timeout = setTimeout(() => controller?.abort(), 3000);
+
+      try {
+        const response = await fetch("http://localhost:3000/health", {
+          signal: controller.signal,
+          cache: "no-store"
+        });
+        if (active) setIsOnline(response.ok);
+      } catch {
+        if (active) setIsOnline(false);
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    void checkHealth();
+    const interval = setInterval(checkHealth, 5000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+      controller?.abort();
+    };
+  }, []);
 
   const activeConversation = conversations.find(
     (conversation) => conversation.id === activeConversationId
@@ -317,7 +349,12 @@ useEffect(() => {
       <main className="chat-container">
         <header className="chat-header">
           <h2>Nova</h2>
-          <span className="nova-status">● Online</span>
+          <span
+            className={`nova-status ${isOnline ? "online" : "offline"}`}
+            role="status"
+          >
+            ● {isOnline ? "Online" : "Offline"}
+          </span>
         </header>
 
         <MessageList
