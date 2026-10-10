@@ -10,7 +10,7 @@ import { errorHandler } from "./middleware/errorHandler";
 import "./novaCore/events/novaEventHandler";
 import "./database/database";
 import { startScheduler } from "./novaCore/tasks/scheduler";
-import { startWebSocketServer, sendToClients } from "./communication/websocket";
+import { startWebSocketServer } from "./communication/websocket";
 
 //create a logger instance for the server
 const logger = debug("NovaAgent:server");

@@ -1,3 +1,5 @@
+import { BACKEND_URL } from "./api";
+
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let shouldReconnect = false;
@@ -11,7 +13,7 @@ type NovaWebSocketMessage = {
 let messageHandler: ((message: NovaWebSocketMessage) => void) | null = null;
 
 export function setWebSocketMessageHandler(
-  handler: (message: NovaWebSocketMessage) => void
+  handler: ((message: NovaWebSocketMessage) => void) | null
 ) {
   messageHandler = handler;
 }
@@ -31,7 +33,7 @@ function connect() {
     return;
   }
 
-  const newSocket = new WebSocket("ws://localhost:3000");
+  const newSocket = new WebSocket(BACKEND_URL.replace(/^http/, "ws"));
 
   socket = newSocket;
 

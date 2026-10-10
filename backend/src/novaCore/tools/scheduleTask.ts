@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Temporal } from "@js-temporal/polyfill";
+import { resolveTaskTime } from "../tasks/taskTime";
 
 import { addTask } from "../tasks/taskStore";
 import { ScheduledTask } from "../../types/taskTypes";
@@ -17,11 +17,7 @@ export async function scheduleTask({
   time: string;
   timezone: string;
 }) {
-  const zonedDateTime = Temporal.ZonedDateTime.from(
-    `${date}T${time}[${timezone}]`
-  );
-
-  const runAt = new Date(zonedDateTime.epochMilliseconds);
+  const { zonedDateTime, runAt } = resolveTaskTime({ date, time, timezone });
 
   const scheduledTask: ScheduledTask = {
     id: randomUUID(),

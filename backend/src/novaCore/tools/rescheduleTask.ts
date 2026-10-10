@@ -1,4 +1,4 @@
-import { Temporal } from "@js-temporal/polyfill";
+import { resolveTaskTime } from "../tasks/taskTime";
 import { rescheduleTask as rescheduleStoredTask } from "../tasks/taskStore";
 
 export async function rescheduleTask({
@@ -14,11 +14,7 @@ export async function rescheduleTask({
   time: string;
   timezone: string;
 }) {
-  const zonedDateTime = Temporal.ZonedDateTime.from(
-    `${date}T${time}[${timezone}]`
-  );
-
-  const runAt = new Date(zonedDateTime.epochMilliseconds);
+  const { zonedDateTime, runAt } = resolveTaskTime({ date, time, timezone });
 
   const rescheduled = rescheduleStoredTask(taskId, conversationId, runAt);
 

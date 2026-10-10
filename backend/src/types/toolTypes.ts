@@ -28,3 +28,13 @@ export function toolFailure(error: unknown): ToolFailure {
           : "An unknown tool error occurred."
   };
 }
+
+export type ToolContext = { conversationId?: number };
+
+export type ToolDefinition = {
+  execute: (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ) => Promise<ToolResult>;
+  requires?: string[];
+};

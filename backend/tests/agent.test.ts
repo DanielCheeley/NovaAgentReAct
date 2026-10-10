@@ -18,14 +18,24 @@ const call = (name: string): ModelResponse => ({
 
 test("every request gets a fresh clock result even when the model requests no tool", async () => {
   let reads = 0;
-  tools.getDateAndTime = { execute: async () => toolSuccess({ time: ++reads }) };
+  tools.getDateAndTime = {
+    execute: async () => toolSuccess({ time: ++reads })
+  };
   for (let i = 1; i <= 2; i++) {
-    await runAgent([{ role: "user", content: "What time is it?" }], undefined, async (messages) => {
-      const clock = messages.find((message) => message.role === "system");
-      assert.ok(clock!.content.includes(`"time":${i}`));
-      assert.ok(!messages.some((message) => message.role === "tool" || message.tool_calls));
-      return { content: "Checked." };
-    });
+    await runAgent(
+      [{ role: "user", content: "What time is it?" }],
+      undefined,
+      async (messages) => {
+        const clock = messages.find((message) => message.role === "system");
+        assert.ok(clock!.content.includes(`"time":${i}`));
+        assert.ok(
+          !messages.some(
+            (message) => message.role === "tool" || message.tool_calls
+          )
+        );
+        return { content: "Checked." };
+      }
+    );
   }
   assert.equal(reads, 2);
 });
@@ -33,20 +43,38 @@ test("every request gets a fresh clock result even when the model requests no to
 test("failed action stops before a repeated call or false success response", async () => {
   let executions = 0;
   let modelCalls = 0;
-  tools.testAction = { execute: async () => { executions++; return toolFailure("Task not found"); } };
-  const result = await runAgent([], undefined, async () => { modelCalls++; return call("testAction"); });
+  tools.testAction = {
+    execute: async () => {
+      executions++;
+      return toolFailure("Task not found");
+    }
+  };
+  const result = await runAgent([], undefined, async () => {
+    modelCalls++;
+    return call("testAction");
+  });
   assert.equal(executions, 1);
   assert.equal(modelCalls, 1);
   assert.match(result.response, /failed: Task not found/);
-  assert.equal(result.messages.filter((message) => message.role === "tool").length, 1);
+  assert.equal(
+    result.messages.filter((message) => message.role === "tool").length,
+    1
+  );
 });
 
 test("failed prerequisite prevents the dependent action", async () => {
   let executions = 0;
-  tools.testPrerequisite = { execute: async () => { throw new Error("Unavailable"); } };
+  tools.testPrerequisite = {
+    execute: async () => {
+      throw new Error("Unavailable");
+    }
+  };
   tools.testAction = {
     requires: ["testPrerequisite"],
-    execute: async () => { executions++; return toolSuccess({}); }
+    execute: async () => {
+      executions++;
+      return toolSuccess({});
+    }
   };
   const result = await runAgent([], undefined, async () => call("testAction"));
   assert.equal(executions, 0);
@@ -59,7 +87,9 @@ test("unknown tools produce a useful response instead of throwing", async () => 
 });
 
 test("background clock failure does not block ordinary conversation", async () => {
-  tools.getDateAndTime = { execute: async () => toolFailure("Clock unavailable") };
+  tools.getDateAndTime = {
+    execute: async () => toolFailure("Clock unavailable")
+  };
   const result = await runAgent([], undefined, async (messages) => {
     assert.match(messages[0].content, /call getDateAndTime and do not guess/);
     return { content: "Hey!" };
@@ -70,9 +100,104 @@ test("background clock failure does not block ordinary conversation", async () =
 
 test("step limit returns partial results and a final message", async () => {
   let executions = 0;
-  tools.testAction = { execute: async () => { executions++; return toolSuccess({}); } };
+  tools.testAction = {
+    execute: async () => {
+      executions++;
+      return toolSuccess({});
+    }
+  };
   const result = await runAgent([], undefined, async () => call("testAction"));
   assert.equal(executions, 5);
   assert.match(result.response, /tool-step limit/);
   assert.equal(result.messages.at(-1)?.role, "assistant");
+});
+
+test("successful prerequisites run once and retain matched calls/results", async () => {
+  const order: string[] = [];
+  tools.testPrerequisite = {
+    execute: async () => {
+      order.push("prerequisite");
+      return toolSuccess({ id: "verified" });
+    }
+  };
+  tools.testAction = {
+    requires: ["testPrerequisite"],
+    execute: async (args, context) => {
+      assert.equal(context.conversationId, 42);
+      assert.deepEqual(args, {});
+      order.push("action");
+      return toolSuccess({ done: true });
+    }
+  };
+  let modelCalls = 0;
+  const result = await runAgent([], 42, async () =>
+    ++modelCalls <= 3 ? call("testAction") : { content: "Done" }
+  );
+  assert.deepEqual(order, ["prerequisite", "action", "action"]);
+  assert.equal(result.response, "Done");
+  for (const message of result.messages.filter(
+    (message) => message.role === "assistant" && message.tool_calls
+  )) {
+    for (const toolCall of message.tool_calls!) {
+      assert.ok(
+        result.messages.some(
+          (result) =>
+            result.role === "tool" && result.tool_call_id === toolCall.id
+        )
+      );
+    }
+  }
+  assert.ok(!result.messages.some((message) => message.role === "system"));
+});
+
+test("mixed results complete the batch and preserve successful actions", async () => {
+  const order: string[] = [];
+  tools.testFailure = {
+    execute: async () => {
+      order.push("failure");
+      throw new Error("Rejected");
+    }
+  };
+  tools.testSuccess = {
+    execute: async () => {
+      order.push("success");
+      return toolSuccess({ done: true });
+    }
+  };
+  const result = await runAgent([], undefined, async () => ({
+    content: "",
+    tool_calls: [
+      call("testFailure").tool_calls![0],
+      { ...call("testSuccess").tool_calls![0], id: "success-call" }
+    ]
+  }));
+  assert.deepEqual(order, ["failure", "success"]);
+  assert.equal(
+    result.messages.filter((message) => message.role === "tool").length,
+    2
+  );
+  assert.match(result.response, /Rejected/);
+  assert.match(
+    result.response,
+    /successful actions already completed still apply/
+  );
+});
+
+test("registry preserves explicit cancellation/rescheduling failures", async () => {
+  const context = { conversationId: -1 };
+  const cancelled = await tools.cancelTask.execute(
+    { taskId: "refactor-test-missing-task" },
+    context
+  );
+  const rescheduled = await tools.rescheduleTask.execute(
+    {
+      taskId: "refactor-test-missing-task",
+      date: "2030-01-01",
+      time: "12:00:00",
+      timezone: "America/Chicago"
+    },
+    context
+  );
+  assert.equal(cancelled.success, false);
+  assert.equal(rescheduled.success, false);
 });
