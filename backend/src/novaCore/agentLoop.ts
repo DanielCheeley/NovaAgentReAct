@@ -3,6 +3,8 @@ import { generateResponse } from "./model";
 import { Message } from "../types/conversationType";
 import { tools } from "./tools/toolRegistry";
 import { executeTool } from "./tools/executeTool";
+import { schedulingAllowed, schedulingDenied, schedulingKey } from "./tools/schedulingPolicy";
+import { toolFailure, type ToolResult } from "../types/toolTypes";
 
 const logger = debug("NovaAgent:Agent");
 
@@ -15,6 +17,8 @@ export async function runAgent(
   const MAX_LOOPS = 5;
   const generatedMessages: Message[] = [];
   const executedTools = new Set<string>();
+  const allowScheduling = schedulingAllowed(messages);
+  const scheduledResults = new Map<string, ToolResult>();
 
   function finish(content: string) {
     const message: Message = { role: "assistant", content };
@@ -62,6 +66,8 @@ export async function runAgent(
     for (const toolCall of response.tool_calls) {
       const toolName = toolCall.function.name;
       const tool = tools[toolName];
+
+      if (toolName === "scheduleTask" && !allowScheduling) continue;
 
       for (const requirement of tool.requires ?? []) {
         if (!executedTools.has(requirement)) {
@@ -146,9 +152,16 @@ export async function runAgent(
 
       logger("Nova is using tool:", toolName);
 
-      const result = await executeTool(tool, toolCall.function.arguments, {
-        conversationId
-      });
+      const denied = toolName === "scheduleTask" && !allowScheduling;
+      const key = toolName === "scheduleTask"
+        ? schedulingKey(toolCall.function.arguments)
+        : undefined;
+      const result = denied
+        ? toolFailure(schedulingDenied)
+        : (key && scheduledResults.get(key)) || await executeTool(
+          tool, toolCall.function.arguments, { conversationId }
+        );
+      if (key && result.success) scheduledResults.set(key, result);
 
       logger("Tool result:", result);
 
@@ -163,7 +176,7 @@ export async function runAgent(
 
       if (result.success) {
         executedTools.add(toolName);
-      } else {
+      } else if (!denied) {
         failures.push(`The ${toolName} tool failed: ${result.error}.`);
       }
     }

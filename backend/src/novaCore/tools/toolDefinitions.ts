@@ -71,7 +71,7 @@ export const toolDefinitions = [
     function: {
       name: "scheduleTask",
       description:
-        "Schedules an instruction for Nova to execute at a specific future date and time. Use this when the user asks Nova to remind them of something OR asks Nova to perform/check/review something at a future time. This can include actions Nova should perform on its own, such as checking memory, reviewing information, running a tool, or evaluating something later. Before using this tool, Nova MUST know the exact date, time, and timezone. If the user gives a relative or incomplete time, use getDateAndTime first. Never invent the date, time, or timezone. The scheduling system handles timezone conversion.",
+        "Creates a task ONLY when the user explicitly requests a reminder or future execution. Ordinary coding, questions, conversation, and remembering facts must be handled directly, without scheduling. Never invent a delay. Ask for clarification if intent or the requested time is missing. Before scheduling, establish the exact date, time, and IANA timezone using fresh clock context or getDateAndTime. The scheduling system handles timezone conversion.",
       parameters: {
         type: "object",
         properties: {
