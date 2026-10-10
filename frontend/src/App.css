@@ -119,6 +119,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
+  min-width: 0;
 }
 
 .chat-header {
@@ -144,15 +145,16 @@
 
 .messages {
   flex: 1;
+  min-height: 0;
   padding: 24px;
   overflow-y: auto;
 }
 
 .message-list {
   width: 100%;
-  max-width: 65%;
+  max-width: 1000px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 0;
 }
 
 /* User */
@@ -328,6 +330,7 @@
 
 .input-container textarea {
   flex: 1;
+  min-width: 0;
   padding: 12px;
   border: none;
   outline: none;
@@ -388,4 +391,23 @@
 
 .send-button:hover {
   background: #ddd;
+}
+
+@media (max-width: 700px) {
+  .sidebar {
+    width: 160px;
+    flex-shrink: 0;
+    padding: 12px;
+  }
+
+  .messages,
+  .input-area {
+    padding: 12px;
+  }
+
+  .user-message,
+  .nova-message {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
 }

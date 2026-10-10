@@ -8,6 +8,7 @@ import {
 import { Message } from "../types/conversationType";
 import { NovaEvent } from "../types/eventType";
 import { tools } from "./tools/toolRegistry";
+import { ToolResult, toolFailure } from "../types/toolTypes";
 
 const logger = debug("NovaAgent:Agent");
 
@@ -167,15 +168,12 @@ async function runAgent(messages: Message[], conversationId?: number) {
         messages.push(prerequisiteCallMessage);
         generatedMessages.push(prerequisiteCallMessage);
 
-        let result: unknown;
+        let result: ToolResult;
 
         try {
           result = await tool.execute({}, { conversationId });
         } catch (error) {
-          result = {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown tool error"
-          };
+          result = toolFailure(error);
         }
 
         logger("Prerequisite result:", result);
@@ -191,13 +189,7 @@ async function runAgent(messages: Message[], conversationId?: number) {
         generatedMessages.push(prerequisiteResult);
 
         // Detect an explicit failure result.
-        const failed =
-          typeof result === "object" &&
-          result !== null &&
-          "success" in result &&
-          result.success === false;
-
-        if (failed) {
+        if (!result.success) {
           prerequisiteFailed = true;
 
           messages.push({
@@ -248,17 +240,14 @@ async function runAgent(messages: Message[], conversationId?: number) {
 
       logger("Nova is using tool:", toolName);
 
-      let result: unknown;
+      let result: ToolResult;
 
       try {
         result = await tool.execute(toolCall.function.arguments, {
           conversationId
         });
       } catch (error) {
-        result = {
-          success: false,
-          error: error instanceof Error ? error.message : "Unknown tool error"
-        };
+        result = toolFailure(error);
       }
 
       logger("Tool result:", result);
@@ -273,7 +262,9 @@ async function runAgent(messages: Message[], conversationId?: number) {
       messages.push(toolMessage);
       generatedMessages.push(toolMessage);
 
-      executedTools.add(toolName);
+      if (result.success) {
+        executedTools.add(toolName);
+      }
     }
   }
 

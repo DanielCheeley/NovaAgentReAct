@@ -36,10 +36,12 @@ function connect() {
   socket = newSocket;
 
   newSocket.onopen = () => {
+    if (socket !== newSocket) return;
     console.log("Connected to Nova WebSocket");
   };
 
   newSocket.onmessage = (event) => {
+    if (socket !== newSocket) return;
     const data = JSON.parse(event.data);
 
     console.log("Nova WebSocket message:", data);
@@ -48,15 +50,16 @@ function connect() {
   };
 
   newSocket.onerror = (error) => {
+    if (socket !== newSocket) return;
     console.error("WebSocket error:", error);
   };
 
   newSocket.onclose = () => {
-    console.log("Nova WebSocket disconnected");
-
     if (socket !== newSocket) {
       return;
     }
+
+    console.log("Nova WebSocket disconnected");
 
     socket = null;
 
