@@ -202,42 +202,168 @@ test("registry preserves explicit cancellation/rescheduling failures", async () 
   assert.equal(rescheduled.success, false);
 });
 
-test("unsolicited scheduling is blocked and Nova can still fulfill ordinary work", async () => {
-  let executions = 0;
-  let turns = 0;
-  tools.scheduleTask = { execute: async () => { executions++; return toolSuccess({ taskId: "bad" }); } };
-  const result = await runAgent(
-    [{ role: "user", content: "cool now write it in typescript" }], 1,
-    async (messages) => {
-      if (++turns === 1) return call("scheduleTask");
-      assert.match(messages.at(-1)!.content, /not authorized/);
-      return { content: "Here is the TypeScript function." };
-    }
-  );
-  assert.equal(executions, 0);
-  assert.equal(result.response, "Here is the TypeScript function.");
-});
-
 test("identical scheduling calls reuse success in a batch and later loop steps", async () => {
   let executions = 0;
   let turns = 0;
-  tools.scheduleTask = { execute: async () => { executions++; return toolSuccess({ taskId: "only-task" }); } };
+  tools.scheduleTask = {
+    execute: async () => {
+      executions++;
+      return toolSuccess({ taskId: "only-task" });
+    }
+  };
   const schedulingCall = (id: string) => ({
-    id, function: { index: 0, name: "scheduleTask", arguments: {
-      task: "Check build", date: "2030-01-01", time: "15:00:00", timezone: "America/Chicago"
-    } }
+    id,
+    function: {
+      index: 0,
+      name: "scheduleTask",
+      arguments: {
+        operation: "create",
+        task: "Check build",
+        date: "2030-01-01",
+        time: "15:00:00",
+        timezone: "America/Chicago"
+      }
+    }
   });
   const result = await runAgent(
-    [{ role: "user", content: "Remind me to check the build tomorrow" }], 1,
-    async () => ++turns === 1
-      ? { content: "", tool_calls: [schedulingCall("first"), schedulingCall("second")] }
-      : turns === 2
-        ? { content: "", tool_calls: [schedulingCall("third")] }
-        : { content: "Reminder set." }
+    [{ role: "user", content: "Remind me to check the build tomorrow" }],
+    1,
+    async () =>
+      ++turns === 1
+        ? {
+            content: "",
+            tool_calls: [schedulingCall("first"), schedulingCall("second")]
+          }
+        : turns === 2
+          ? { content: "", tool_calls: [schedulingCall("third")] }
+          : { content: "Reminder set." }
   );
   assert.equal(executions, 1);
   const results = result.messages.filter((message) => message.role === "tool");
   assert.equal(results.length, 3);
-  assert.deepEqual(results.map((message) => message.tool_call_id), ["first", "second", "third"]);
-  for (const message of results) assert.equal(JSON.parse(message.content).data.taskId, "only-task");
+  assert.deepEqual(
+    results.map((message) => message.tool_call_id),
+    ["first", "second", "third"]
+  );
+  for (const message of results)
+    assert.equal(JSON.parse(message.content).data.taskId, "only-task");
+});
+
+test("cancellation during a tool preserves its result and prevents the remaining actions", async () => {
+  const abort = new AbortController();
+  let later = 0;
+  const persisted: unknown[] = [];
+  tools.firstAction = {
+    execute: async () => {
+      abort.abort();
+      return toolSuccess({ completed: true });
+    }
+  };
+  tools.laterAction = {
+    execute: async () => {
+      later++;
+      return toolSuccess({});
+    }
+  };
+  const result = await runAgent(
+    [],
+    undefined,
+    async () => ({
+      content: "",
+      tool_calls: [
+        { ...call("firstAction").tool_calls![0], id: "first" },
+        { ...call("laterAction").tool_calls![0], id: "later" }
+      ]
+    }),
+    { signal: abort.signal, onRecord: (message) => persisted.push(message) }
+  );
+  assert.equal(result.cancelled, true);
+  assert.equal(later, 0);
+  const outcomes = result.messages.filter((message) => message.role === "tool");
+  assert.equal(JSON.parse(outcomes[0].content).success, true);
+  assert.equal(JSON.parse(outcomes[1].content).success, false);
+  assert.equal(persisted.length, result.messages.length);
+});
+
+test("tool-loop narration stays recorded through prerequisites and the final reply", async () => {
+  tools.lookup = { requires: ["setup"], execute: async () => toolSuccess({}) };
+  tools.setup = { execute: async () => toolSuccess({}) };
+  let turn = 0;
+  const completed: string[] = [];
+  const saved: string[] = [];
+  const result = await runAgent(
+    [],
+    undefined,
+    async () => {
+      turn++;
+      return turn < 3
+        ? {
+            ...call("lookup"),
+            content: turn === 1 ? "Let me check." : "Checking now."
+          }
+        : { content: "Here is the answer." };
+    },
+    {
+      onLoopComplete: (content) => completed.push(content),
+      onRecord: (message) => {
+        if (message.role === "assistant" && message.content)
+          saved.push(message.content);
+      }
+    }
+  );
+  assert.deepEqual(completed, ["Let me check.", "Checking now."]);
+  assert.deepEqual(saved, [...completed, "Here is the answer."]);
+  assert.equal(result.response, "Here is the answer.");
+});
+
+test("repeated unauthorized scheduling stops before further retries or false promises", async () => {
+  let turns = 0;
+  let executions = 0;
+  tools.scheduleTask = {
+    execute: async () => {
+      executions++;
+      return toolSuccess({});
+    }
+  };
+  const result = await runAgent(
+    [{ role: "user", content: "write some code" }],
+    1,
+    async () => {
+      turns++;
+      return call("scheduleTask");
+    }
+  );
+  assert.equal(executions, 0);
+  assert.equal(turns, 1);
+  assert.match(result.response, /No reminder was created/);
+});
+
+test("relative scheduling accepts structured delays and preserves duplicate suppression", async () => {
+  let turns = 0;
+  let executions = 0;
+  tools.scheduleTask = {
+    execute: async (args) => {
+      executions++;
+      const scheduled = new Date(`${args.date}T${args.time}Z`).getTime();
+      assert.ok(Math.abs(scheduled - Date.now() - 10000) < 1500);
+      return toolSuccess({ taskId: "relative" });
+    }
+  };
+  const result = await runAgent(
+    [{ role: "user", content: "remind me in 10 secs to eat something" }],
+    1,
+    async () => {
+      if (++turns > 2) return { content: "Reminder set." };
+      const response = call("scheduleTask");
+      response.tool_calls![0].function.arguments = {
+        operation: "create",
+        task: "Eat something",
+        delaySeconds: 10,
+        timezone: "UTC"
+      };
+      return response;
+    }
+  );
+  assert.equal(executions, 1);
+  assert.equal(result.response, "Reminder set.");
 });

@@ -3,6 +3,8 @@ import { NOVA_SYSTEM_PROMPT } from "./novaPrompt";
 import { Message } from "../types/conversationType";
 import { toolDefinitions } from "./tools/toolDefinitions";
 import { ModelResponse } from "../types/modelResponseType";
+import type { GenerationOptions } from "../types/generationType";
+import { requestOllama } from "./providers/ollama";
 
 type ModelRequest = {
   messages: Message[];
@@ -15,29 +17,30 @@ type ModelRequest = {
 async function requestModel(
   request: ModelRequest,
   errorLabel: string,
-  signal?: AbortSignal
+  options: GenerationOptions = {}
 ): Promise<ModelResponse> {
-  const response = await fetch(MODEL_CONFIG.url, {
-    signal,
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: MODEL_CONFIG.model, ...request })
-  });
-  if (!response.ok) throw new Error(`${errorLabel}: ${response.status}`);
-  const data = (await response.json()) as { message: ModelResponse };
-  return data.message;
+  return requestOllama(
+    MODEL_CONFIG.url,
+    { model: MODEL_CONFIG.model, ...request },
+    errorLabel,
+    options
+  );
 }
 
-export function generateResponse(messages: Message[]): Promise<ModelResponse> {
+export function generateResponse(
+  messages: Message[],
+  options: GenerationOptions = {}
+): Promise<ModelResponse> {
   return requestModel(
     {
       messages: [{ role: "system", content: NOVA_SYSTEM_PROMPT }, ...messages],
       tools: toolDefinitions,
-      stream: MODEL_CONFIG.stream,
+      stream: Boolean(options.onContent) || MODEL_CONFIG.stream,
       think: MODEL_CONFIG.think,
       options: { temperature: MODEL_CONFIG.temperature }
     },
-    "Ollama request failed"
+    "Ollama request failed",
+    options
   );
 }
 
@@ -61,7 +64,7 @@ export async function generateConversationTitle(
       options: { temperature: 0.3 }
     },
     "Ollama title request failed",
-    AbortSignal.timeout(30_000)
+    { signal: AbortSignal.timeout(30_000) }
   );
   return response.content.trim();
 }

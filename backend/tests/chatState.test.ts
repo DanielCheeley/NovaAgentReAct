@@ -18,17 +18,103 @@ function state(): ChatState {
   };
 }
 
+test("Stop freezes streamed text and ignores late completion even after a new request", () => {
+  let current = chatReducer(state(), {
+    type: "stream.start",
+    id: 1,
+    requestId: "old"
+  });
+  current = chatReducer(current, {
+    type: "stream.content",
+    id: 1,
+    requestId: "old",
+    content: "Partial"
+  });
+  current = chatReducer(current, {
+    type: "stream.stop",
+    id: 1,
+    requestId: "old"
+  });
+  assert.equal(current.generatingConversationIds.has(1), false);
+  assert.equal(current.conversations[0].messages[0].status, "stopped");
+  const stopped = current;
+  assert.equal(
+    chatReducer(current, {
+      type: "stream.content",
+      id: 1,
+      requestId: "old",
+      content: "Late"
+    }),
+    stopped
+  );
+  current = chatReducer(current, {
+    type: "stream.start",
+    id: 1,
+    requestId: "new"
+  });
+  assert.equal(
+    chatReducer(current, {
+      type: "stream.content",
+      id: 1,
+      requestId: "old",
+      content: "Late"
+    }),
+    current
+  );
+  assert.equal(current.conversations[0].messages[0].content, "Partial");
+});
+
+test("stream updates replace one placeholder without interfering with another chat", () => {
+  let current = chatReducer(state(), {
+    type: "stream.start",
+    id: 1,
+    requestId: "one"
+  });
+  current = chatReducer(current, {
+    type: "stream.start",
+    id: 2,
+    requestId: "two"
+  });
+  current = chatReducer(current, {
+    type: "stream.content",
+    id: 1,
+    requestId: "one",
+    content: "Hello"
+  });
+  current = chatReducer(current, {
+    type: "stream.content",
+    id: 1,
+    requestId: "one",
+    content: "Hello again"
+  });
+  assert.equal(current.conversations[0].messages.length, 1);
+  assert.equal(current.conversations[0].messages[0].content, "Hello again");
+  assert.equal(current.conversations[1].messages[0].content, "");
+  assert.equal(current.generatingConversationIds.has(2), true);
+});
+
 test("background titles preserve messages and survive an older HTTP response", () => {
   const original = state();
-  const titled = chatReducer(original, { type: "title", id: 1, title: "Greeting" });
+  const titled = chatReducer(original, {
+    type: "title",
+    id: 1,
+    title: "Greeting"
+  });
   const replied = chatReducer(titled, {
-    type: "message", id: 1, title: "New Conversation",
+    type: "message",
+    id: 1,
+    title: "New Conversation",
     message: { role: "assistant", content: "Hello" }
   });
   assert.equal(replied.conversations[0].title, "Greeting");
-  assert.deepEqual(replied.conversations[0].messages, [{ role: "assistant", content: "Hello" }]);
+  assert.deepEqual(replied.conversations[0].messages, [
+    { role: "assistant", content: "Hello" }
+  ]);
   assert.equal(original.conversations[0].title, "One");
-  assert.deepEqual(chatReducer(replied, { type: "title", id: 999, title: "Gone" }), replied);
+  assert.deepEqual(
+    chatReducer(replied, { type: "title", id: 999, title: "Gone" }),
+    replied
+  );
 });
 
 test("chat loading, creation and selection preserve conversation order", () => {
@@ -105,4 +191,47 @@ test("generating indicators remain independent across chats", () => {
   });
   assert.deepEqual([...finished.generatingConversationIds], [2]);
   assert.equal(original.generatingConversationIds.size, 0);
+});
+
+test("completed loops survive subsequent snapshots and stopping the next loop", () => {
+  let current = chatReducer(state(), {
+    type: "stream.start",
+    id: 1,
+    requestId: "loops"
+  });
+  current = chatReducer(current, {
+    type: "stream.content",
+    id: 1,
+    requestId: "loops",
+    content: "Checking"
+  });
+  current = chatReducer(current, {
+    type: "stream.loop.complete",
+    id: 1,
+    requestId: "loops",
+    content: "Checking now."
+  });
+  current = chatReducer(current, {
+    type: "stream.content",
+    id: 1,
+    requestId: "loops",
+    content: ""
+  });
+  current = chatReducer(current, {
+    type: "stream.content",
+    id: 1,
+    requestId: "loops",
+    content: "Next reply"
+  });
+  current = chatReducer(current, {
+    type: "stream.stop",
+    id: 1,
+    requestId: "loops"
+  });
+  assert.deepEqual(
+    current.conversations[0].messages.map((m) => m.content),
+    ["Checking now.", "Next reply"]
+  );
+  assert.equal(current.conversations[0].messages[0].status, undefined);
+  assert.equal(current.conversations[0].messages[1].status, "stopped");
 });

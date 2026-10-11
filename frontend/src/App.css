@@ -298,7 +298,9 @@
 }
 
 @keyframes thinking {
-  0%, 60%, 100% {
+  0%,
+  60%,
+  100% {
     opacity: 0.3;
   }
 
@@ -399,6 +401,25 @@
 
 .send-button:hover {
   background: #ddd;
+}
+
+.response-status,
+.response-timing {
+  color: #aaa;
+  font-size: 12px;
+}
+
+.response-timing {
+  margin-top: 8px;
+}
+.response-timing summary {
+  cursor: pointer;
+}
+.response-timing p {
+  margin: 4px 0;
+}
+.stop-button {
+  color: #a42222;
 }
 
 @media (max-width: 700px) {

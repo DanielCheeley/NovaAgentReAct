@@ -1,4 +1,5 @@
 import type { Conversation } from "../types/chat";
+import { consumeChatStream, type ChatStreamEvent } from "./chatStream";
 
 export const BACKEND_URL = "http://localhost:3000";
 
@@ -41,4 +42,21 @@ export async function sendChatMessage(
     body: JSON.stringify({ conversationId, message })
   });
   return response.json();
+}
+
+export async function streamChatMessage(
+  conversationId: number,
+  message: string,
+  requestId: string,
+  signal: AbortSignal,
+  onEvent: (event: ChatStreamEvent) => void
+) {
+  const response = await request("/chat/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ conversationId, message, requestId }),
+    signal
+  });
+  if (!response.body) throw new Error("Chat stream has no body");
+  await consumeChatStream(response.body, requestId, onEvent, signal);
 }

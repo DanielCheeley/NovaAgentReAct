@@ -1,7 +1,9 @@
 import Database from "better-sqlite3";
 import path from "node:path";
 
-const databasePath = path.resolve("data/nova.db");
+const databasePath = path.resolve(
+  process.env.NOVA_DATABASE_PATH ?? "data/nova.db"
+);
 
 export const db = new Database(databasePath);
 

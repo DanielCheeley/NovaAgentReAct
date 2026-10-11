@@ -59,7 +59,7 @@ export const toolDefinitions = [
     function: {
       name: "getDateAndTime",
       description:
-        "Gets the current date and the time. MUST be used before scheduling a task when the user gives a relative or incomplete time such as 'in 10 minutes', 'at 9 PM', 'tomorrow', or 'Friday'. Use the result to determine the exact date and time for the scheduled task. Never guess the current date or time.",
+        "Gets the current date, time, and timezone. Use fresh clock context for calendar references such as tomorrow, Friday, or at 9 PM. Relative durations use delaySeconds; the backend computes their execution timestamp.",
       parameters: {
         type: "object"
       }
@@ -71,10 +71,28 @@ export const toolDefinitions = [
     function: {
       name: "scheduleTask",
       description:
-        "Creates a task ONLY when the user explicitly requests a reminder or future execution. Ordinary coding, questions, conversation, and remembering facts must be handled directly, without scheduling. Never invent a delay. Ask for clarification if intent or the requested time is missing. Before scheduling, establish the exact date, time, and IANA timezone using fresh clock context or getDateAndTime. The scheduling system handles timezone conversion.",
+        "For a new reminder use operation=create; for a correction use operation=update and the active verified task; for a retry use operation=retry. Relative times use delaySeconds (10 seconds=10, a minute=60, now=0), without date/time. Creates a task ONLY when the user explicitly requests a reminder or future execution. Ordinary coding, questions, conversation, and remembering facts must be handled directly, without scheduling. Never invent a delay. Ask for clarification if intent or the requested time is missing. For absolute times provide date, time, and IANA timezone using fresh clock context. For durations provide only delaySeconds and optionally timezone. The scheduling system calculates and converts timestamps.",
       parameters: {
         type: "object",
         properties: {
+          operation: {
+            type: "string",
+            enum: ["create", "update", "retry"],
+            description:
+              "User requested action. Corrections update the active reminder; retry never duplicates success."
+          },
+          taskId: {
+            type: "string",
+            description:
+              "Verified pending task ID for update. Omit to use the active reminder."
+          },
+          delaySeconds: {
+            type: "integer",
+            minimum: 0,
+            maximum: 31536000,
+            description:
+              "Delay from execution, in seconds. Supply this OR date/time."
+          },
           task: {
             type: "string",
             description: "What Nova should do or say when the task becomes due."
@@ -95,7 +113,7 @@ export const toolDefinitions = [
               "The IANA timezone for the scheduled time, such as America/Chicago."
           }
         },
-        required: ["task", "date", "time", "timezone"]
+        required: ["operation"]
       }
     }
   },
@@ -138,10 +156,17 @@ export const toolDefinitions = [
     function: {
       name: "rescheduleTask",
       description:
-        "Changes the scheduled time of an existing pending task. Use getTasks first when the user identifies a task by description rather than task ID. The task must already exist and be pending. If the user gives a relative or incomplete time such as 'in 20 minutes', use getDateAndTime first to determine the current local date, time, and timezone. Never invent the date, time, or timezone. Do not create a new task when rescheduling an existing one.",
+        "Changes the scheduled time of an existing pending task. For relative time supply delaySeconds instead of date/time; the backend calculates the timestamp. Use getTasks first when the user identifies a task by description rather than task ID. The task must already exist and be pending. Use fresh clock context for calendar references. Never invent the date, time, or timezone. Do not create a new task when rescheduling an existing one.",
       parameters: {
         type: "object",
         properties: {
+          delaySeconds: {
+            type: "integer",
+            minimum: 0,
+            maximum: 31536000,
+            description:
+              "Delay from execution, in seconds. Supply this OR date/time."
+          },
           taskId: {
             type: "string",
             description:
@@ -161,7 +186,7 @@ export const toolDefinitions = [
               "The IANA timezone for the new scheduled time, such as America/Chicago."
           }
         },
-        required: ["taskId", "date", "time", "timezone"]
+        required: []
       }
     }
   }
