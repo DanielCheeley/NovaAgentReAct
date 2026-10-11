@@ -7,7 +7,8 @@
     "test": "tsx --test tests/*.test.ts",
     "dev": "tsx watch --env-file=.env src/server.ts",
     "start": "node dist/server.js",
-    "build": "tsc"
+    "build": "tsc",
+    "benchmark:model": "tsx scripts/benchmarkModel.ts"
   },
   "repository": {
     "type": "git",

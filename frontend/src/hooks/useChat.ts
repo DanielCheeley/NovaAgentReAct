@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import * as api from "../communication/api";
 import {
   connectWebSocket,
@@ -9,6 +9,18 @@ import { chatReducer, initialChatState } from "../state/chatState";
 
 export function useChat() {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
+  const requests = useRef(
+    new Map<number, { requestId: string; controller: AbortController }>()
+  );
+
+  useEffect(
+    () => () => {
+      for (const request of requests.current.values())
+        request.controller.abort();
+      requests.current.clear();
+    },
+    []
+  );
 
   useEffect(() => {
     setWebSocketMessageHandler((data) => {
@@ -61,6 +73,7 @@ export function useChat() {
   }
 
   async function deleteConversation(id: number) {
+    stopResponse(id);
     try {
       await api.deleteConversation(id);
       dispatch({ type: "deleted", id });
@@ -70,36 +83,71 @@ export function useChat() {
   }
 
   async function sendMessage(id: number, message: string) {
-    dispatch({ type: "generating", id, value: true });
+    if (requests.current.has(id)) return;
+    const requestId = crypto.randomUUID();
+    const controller = new AbortController();
+    requests.current.set(id, { requestId, controller });
     dispatch({
       type: "message",
       id,
       message: { role: "user", content: message },
       moveToTop: true
     });
+    dispatch({ type: "stream.start", id, requestId });
     try {
-      const response = await api.sendChatMessage(id, message);
-      dispatch({
-        type: "message",
+      await api.streamChatMessage(
         id,
-        title: response.title,
-        message: { role: "assistant", content: response.message },
-        moveToTop: true
-      });
+        message,
+        requestId,
+        controller.signal,
+        (event) => {
+          if (
+            controller.signal.aborted ||
+            requests.current.get(id)?.requestId !== requestId
+          )
+            return;
+          if (event.type === "content") {
+            dispatch({
+              type: "stream.content",
+              id,
+              requestId,
+              content: event.content
+            });
+          } else if (event.type === "loop.complete") {
+            dispatch({
+              type: "stream.loop.complete",
+              id,
+              requestId,
+              content: event.content
+            });
+          } else if (event.type === "done") {
+            dispatch({
+              type: "stream.done",
+              id,
+              requestId,
+              content: event.message,
+              title: event.title,
+              timing: event.timing
+            });
+          }
+        }
+      );
     } catch (error) {
+      if (controller.signal.aborted) return;
       console.error("Failed to contact Nova backend:", error);
-      dispatch({
-        type: "message",
-        id,
-        message: {
-          role: "assistant",
-          content: "Sorry, I'm having trouble connecting to my server."
-        },
-        moveToTop: true
-      });
+      dispatch({ type: "stream.error", id, requestId });
     } finally {
-      dispatch({ type: "generating", id, value: false });
+      if (requests.current.get(id)?.requestId === requestId)
+        requests.current.delete(id);
     }
+  }
+
+  function stopResponse(id: number) {
+    const request = requests.current.get(id);
+    if (!request) return;
+    request.controller.abort();
+    requests.current.delete(id);
+    dispatch({ type: "stream.stop", id, requestId: request.requestId });
   }
 
   return {
@@ -110,6 +158,7 @@ export function useChat() {
     selectConversation: (id: number) => dispatch({ type: "selected", id }),
     createNewConversation,
     deleteConversation,
-    sendMessage
+    sendMessage,
+    stopResponse
   };
 }

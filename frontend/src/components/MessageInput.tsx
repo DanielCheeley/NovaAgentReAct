@@ -5,15 +5,18 @@ type MessageInputProps = {
   setMessage: (message: string) => void;
   sendMessage: () => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
+  isGenerating: boolean;
+  stopResponse: () => void;
 };
 
 function MessageInput({
   message,
   setMessage,
   sendMessage,
-  textareaRef
+  textareaRef,
+  isGenerating,
+  stopResponse
 }: MessageInputProps) {
-
   const handleInput = () => {
     const textarea = textareaRef.current;
 
@@ -23,12 +26,10 @@ function MessageInput({
     textarea.style.height = `${textarea.scrollHeight}px`;
   };
 
-  const handleKeyDown = (
-    event: React.KeyboardEvent<HTMLTextAreaElement>
-  ) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      sendMessage();
+      if (!isGenerating) sendMessage();
     }
   };
 
@@ -45,8 +46,13 @@ function MessageInput({
           onKeyDown={handleKeyDown}
         />
 
-        <button className="send-button" onClick={sendMessage}>
-          ↑
+        <button
+          className={`send-button${isGenerating ? " stop-button" : ""}`}
+          onClick={isGenerating ? stopResponse : sendMessage}
+          aria-label={isGenerating ? "Stop response" : "Send message"}
+          title={isGenerating ? "Stop response" : "Send message"}
+        >
+          {isGenerating ? "■" : "↑"}
         </button>
       </div>
     </div>

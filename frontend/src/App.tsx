@@ -19,7 +19,8 @@ function App() {
     selectConversation,
     createNewConversation,
     deleteConversation,
-    sendMessage: sendChatMessage
+    sendMessage: sendChatMessage,
+    stopResponse
   } = useChat();
 
   useEffect(() => {
@@ -28,7 +29,12 @@ function App() {
   }, [activeConversation?.messages]);
 
   function sendMessage() {
-    if (!message.trim() || activeConversationId === null) return;
+    if (
+      !message.trim() ||
+      activeConversationId === null ||
+      generatingConversationIds.has(activeConversationId)
+    )
+      return;
     void sendChatMessage(activeConversationId, message);
     setMessage("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -70,6 +76,14 @@ function App() {
           setMessage={setMessage}
           sendMessage={sendMessage}
           textareaRef={textareaRef}
+          isGenerating={
+            activeConversationId !== null &&
+            generatingConversationIds.has(activeConversationId)
+          }
+          stopResponse={() => {
+            if (activeConversationId !== null)
+              stopResponse(activeConversationId);
+          }}
         />
       </main>
     </div>

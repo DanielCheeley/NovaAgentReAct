@@ -29,7 +29,7 @@ export function toolFailure(error: unknown): ToolFailure {
   };
 }
 
-export type ToolContext = { conversationId?: number };
+export type ToolContext = { conversationId?: number; signal?: AbortSignal };
 
 export type ToolDefinition = {
   execute: (

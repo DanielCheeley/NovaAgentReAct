@@ -3,6 +3,7 @@ import {
   deleteConversation,
   getConversations
 } from "../novaCore/memory/conversationStore";
+import { inConversation } from "../novaCore/conversationQueue";
 
 export const conversationsRouter = Router();
 
@@ -11,7 +12,7 @@ conversationsRouter.get("/", (_req, res) => {
   res.json(conversations);
 });
 
-conversationsRouter.delete("/:id", (req, res) => {
+conversationsRouter.delete("/:id", async (req, res) => {
   const conversationId = Number(req.params.id);
 
   if (!Number.isInteger(conversationId)) {
@@ -21,7 +22,9 @@ conversationsRouter.delete("/:id", (req, res) => {
     return;
   }
 
-  deleteConversation(conversationId);
+  await inConversation(conversationId, async () =>
+    deleteConversation(conversationId)
+  );
 
   res.status(204).send();
 });
