@@ -1,8 +1,9 @@
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: sans-serif;
-}
+:root { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; color: #eeedf2; background: #111114; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+button, a, textarea, summary { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid #c7a0ef; outline-offset: 4px; }
+::selection { background: #75499c; color: white; }

@@ -1,3 +1,4 @@
+import Icon from "./components/Icon";
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "./hooks/useChat";
 import { useBackendHealth } from "./hooks/useBackendHealth";
@@ -10,6 +11,7 @@ function App() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesRef = useRef<HTMLElement>(null);
   const [message, setMessage] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const isOnline = useBackendHealth();
   const {
     conversations,
@@ -42,29 +44,69 @@ function App() {
 
   // actual web page
   return (
-    <div className="app">
+    <div
+      className={`app${sidebarOpen ? " sidebar-open" : ""}`}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") setSidebarOpen(false);
+      }}
+    >
+      {sidebarOpen && (
+        <button
+          className="sidebar-backdrop"
+          aria-label="Close navigation"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       <Sidebar
         conversations={conversations}
         activeConversationId={activeConversationId}
-        onSelectConversation={selectConversation}
-        onNewConversation={createNewConversation}
+        onSelectConversation={(id) => {
+          selectConversation(id);
+          setSidebarOpen(false);
+        }}
+        onNewConversation={() => {
+          createNewConversation();
+          setSidebarOpen(false);
+          textareaRef.current?.focus();
+        }}
         onDeleteConversation={deleteConversation}
       />
 
       <main className="chat-container">
         <header className="chat-header">
-          <h2>Nova</h2>
+          <div className="header-title">
+            <button
+              className="menu-button"
+              aria-label={sidebarOpen ? "Close navigation" : "Open navigation"}
+              aria-expanded={sidebarOpen}
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              <Icon name="menu" />
+            </button>
+            <span className="header-mark">
+              <Icon name="spark" />
+            </span>
+            <div>
+              <h2>Nova</h2>
+              <p>{activeConversation?.title ?? "Your AI companion"}</p>
+            </div>
+          </div>
           <span
             className={`nova-status ${isOnline ? "online" : "offline"}`}
             role="status"
           >
-            ● {isOnline ? "Online" : "Offline"}
+            <span className="status-dot" /> {isOnline ? "Online" : "Offline"}
           </span>
         </header>
 
         <MessageList
           messages={activeConversation?.messages ?? []}
           messagesRef={messagesRef}
+          onChoosePrompt={(prompt) => {
+            if (activeConversationId === null) createNewConversation();
+            setMessage(prompt);
+            textareaRef.current?.focus();
+          }}
           isGenerating={
             activeConversationId !== null &&
             generatingConversationIds.has(activeConversationId)
@@ -73,7 +115,11 @@ function App() {
 
         <MessageInput
           message={message}
-          setMessage={setMessage}
+          setMessage={(value) => {
+            if (activeConversationId === null && value.trim())
+              createNewConversation();
+            setMessage(value);
+          }}
           sendMessage={sendMessage}
           textareaRef={textareaRef}
           isGenerating={

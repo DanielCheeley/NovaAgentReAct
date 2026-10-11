@@ -1,3 +1,4 @@
+import Icon from "./Icon";
 import type { RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -8,19 +9,29 @@ type MessageListProps = {
   messages: Message[];
   messagesRef: RefObject<HTMLElement | null>;
   isGenerating: boolean;
+  onChoosePrompt: (prompt: string) => void;
 };
 
 function MessageList({
   messages,
   messagesRef,
-  isGenerating
+  isGenerating,
+  onChoosePrompt
 }: MessageListProps) {
   return (
     <section className="messages" ref={messagesRef}>
       {messages.length === 0 ? (
         <div className="welcome">
-          <h2>How can I help?</h2>
-          <p>Start a conversation with Nova.</p>
+          <div className="welcome-orb"><Icon name="spark" size={26} /></div>
+          <h2>What are we working on?</h2>
+          <p>Ask a question or choose a starting point.</p>
+          <div className="prompt-grid">
+            {([
+              { icon: "idea", title: "Explore an idea", description: "Find a fresh perspective", prompt: "Help me brainstorm a creative idea. Ask me what I'm working on first." },
+              { icon: "code", title: "Build something", description: "Work through a coding challenge", prompt: "Help me work through a coding challenge. Ask me about my project first." },
+              { icon: "write", title: "Find the words", description: "Turn a rough thought into a draft", prompt: "Help me turn my thoughts into a clear draft. Ask me what I want to write." },
+            ] as const).map((item) => <button className="prompt-card" key={item.title} onClick={() => onChoosePrompt(item.prompt)}><Icon name={item.icon} size={21} /><strong>{item.title}</strong><span>{item.description}</span><span className="prompt-arrow"><Icon name="arrow" size={16} /></span></button>)}
+          </div>
         </div>
       ) : (
         <div className="message-list">
@@ -35,6 +46,7 @@ function MessageList({
                 }
                 key={index}
               >
+                <div className="message-author">{message.role === "assistant" && <Icon name="spark" size={15} />}{message.role === "user" ? "You" : "Nova"}</div>
                 <ReactMarkdown
                   components={{
                     code({ className, children, ...props }) {
@@ -109,10 +121,10 @@ function MessageList({
           )}
 
           {isGenerating && (
-            <div className="nova-thinking">
-              <span>●</span>
-              <span>●</span>
-              <span>●</span>
+            <div className="nova-thinking" role="status" aria-label="Nova is responding">
+              <span />
+              <span />
+              <span />
             </div>
           )}
         </div>

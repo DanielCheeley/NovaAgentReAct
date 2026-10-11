@@ -1,3 +1,4 @@
+import Icon from "./Icon";
 import type { RefObject } from "react";
 
 type MessageInputProps = {
@@ -27,7 +28,7 @@ function MessageInput({
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       if (!isGenerating) sendMessage();
     }
@@ -37,6 +38,7 @@ function MessageInput({
     <div className="input-area">
       <div className="input-container">
         <textarea
+          aria-label="Message Nova"
           ref={textareaRef}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
@@ -48,13 +50,15 @@ function MessageInput({
 
         <button
           className={`send-button${isGenerating ? " stop-button" : ""}`}
+          disabled={!isGenerating && !message.trim()}
           onClick={isGenerating ? stopResponse : sendMessage}
           aria-label={isGenerating ? "Stop response" : "Send message"}
           title={isGenerating ? "Stop response" : "Send message"}
         >
-          {isGenerating ? "■" : "↑"}
+          <Icon name={isGenerating ? "stop" : "arrow"} size={20} />
         </button>
       </div>
+      <div className="composer-footer"><span>Nova can make mistakes. Give important details a second look.</span><span className="keyboard-hint"><kbd>Enter</kbd> to send / <kbd>Shift + Enter</kbd> for a new line</span></div>
     </div>
   );
 }
