@@ -31,7 +31,7 @@ export const toolDefinitions = [
     function: {
       name: "forgetMemory",
       description:
-        "Delete one saved fact ONLY when the user explicitly asks to forget it. Use a current ID from getMemories; never invent IDs. Ask for clarification if multiple facts match. Deleting a saved fact does not erase existing chat messages. To correct a saved fact, forget the old one and save the explicitly requested replacement.",
+        "Required to actually forget a saved fact when the user asks to forget or remove it, including 'forget that'. A text reply does not delete memory. Use the matching ID from Current saved facts or getMemories; never invent IDs. Call directly when the target is clear; ask for clarification if multiple facts match. Confirm deletion only after this tool succeeds. Deleting a saved fact does not erase existing chat messages. To correct a saved fact, forget the old one and save the explicitly requested replacement.",
       parameters: {
         type: "object",
         properties: {

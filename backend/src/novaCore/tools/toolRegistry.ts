@@ -41,14 +41,11 @@ export const tools: Record<string, ToolDefinition> = {
     return toolSuccess(rememberMemory(args.content));
   }),
   getMemories: defineTool(async () => toolSuccess({ memories: getMemories() })),
-  forgetMemory: defineTool(
-    async (args, context) => {
-      if (!context.memoryWritesAllowed)
-        return toolFailure("Only a user request can forget a memory.");
-      return toolSuccess(forgetMemory(args.memoryId));
-    },
-    ["getMemories"]
-  ),
+  forgetMemory: defineTool(async (args, context) => {
+    if (!context.memoryWritesAllowed)
+      return toolFailure("Only a user request can forget a memory.");
+    return toolSuccess(forgetMemory(args.memoryId));
+  }),
   getWeather: defineTool(async (args) => {
     const result = await getWeather({
       location: args.location as string,

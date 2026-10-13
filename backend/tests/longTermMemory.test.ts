@@ -159,7 +159,7 @@ test("agent records save/list/forget results and injects fresh facts across chat
     assert.ok(
       body.messages.some(
         (m: { content: string }) =>
-          m.content.includes("Current saved facts") &&
+          m.content.startsWith("Current saved facts shared across chats") &&
           m.content.includes("short answers")
       )
     );
@@ -174,7 +174,7 @@ test("agent records save/list/forget results and injects fresh facts across chat
     2,
     async () => {
       step++;
-      if (step <= 2)
+      if (step === 1)
         return {
           content: "",
           tool_calls: [
@@ -191,7 +191,11 @@ test("agent records save/list/forget results and injects fresh facts across chat
       return { content: "Forgotten." };
     }
   );
-  assert.ok(deleted.messages.some((m) => m.tool_name === "getMemories"));
+  assert.equal(
+    step,
+    2,
+    "A direct forget call must execute before the next model reply"
+  );
   assert.ok(
     deleted.messages.some(
       (m) => m.tool_name === "forgetMemory" && JSON.parse(m.content).success
@@ -202,7 +206,7 @@ test("agent records save/list/forget results and injects fresh facts across chat
     const body = JSON.parse(init!.body as string);
     assert.ok(
       !body.messages.some((m: { content: string }) =>
-        m.content.includes("Current saved facts")
+        m.content.startsWith("Current saved facts shared across chats")
       )
     );
     return Response.json({ message: { content: "Hello." } });

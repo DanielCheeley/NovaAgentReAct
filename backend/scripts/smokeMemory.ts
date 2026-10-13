@@ -13,7 +13,9 @@ const { db } = await import("../src/database/database");
 
 async function turn(id: number, text: string) {
   const result = await handleMessage(id, text, {
-    signal: AbortSignal.timeout(90_000)
+    signal: AbortSignal.timeout(90_000),
+    onToolTiming: ({ name, success }) =>
+      console.log(JSON.stringify({ tool: name, success }))
   });
   assert.equal(result.cancelled, false, "Live model timed out");
   console.log(
@@ -29,7 +31,10 @@ try {
   );
   assert.equal(getMemories().length, 1, "Explicit save must create one fact");
   assert.match(getMemories()[0].content, /ginkgo/i);
-  const listing = await turn(1, "What facts have you saved in long-term memory?");
+  const listing = await turn(
+    1,
+    "What facts have you saved in long-term memory?"
+  );
   // The model may answer from the fresh authoritative snapshot instead of
   // redundantly listing the same facts through a tool.
   assert.match(listing, /ginkgo/i);
@@ -41,10 +46,7 @@ try {
     1,
     "Casual facts must not be saved automatically"
   );
-  await turn(
-    3,
-    "Forget the saved fact about my favorite tree from long-term memory."
-  );
+  await turn(1, "forget that");
   assert.equal(getMemories().length, 0, "Explicit forget must delete the fact");
   const afterForget = await turn(4, "What is my favorite tree?");
   assert.doesNotMatch(

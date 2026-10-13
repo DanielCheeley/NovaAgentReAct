@@ -23,7 +23,7 @@ Nova supports explicit chat controls for saved facts shared across conversations
 
 - "Remember that I prefer short answers" saves a fact using `rememberMemory`.
 - "What do you remember about me?" lists saved facts using `getMemories`.
-- "Forget that I prefer short answers" identifies the fact with `getMemories` and deletes it using `forgetMemory`. Ambiguous targets should prompt clarification.
+- "Forget that I prefer short answers" deletes the fact using `forgetMemory`, with its ID from the current memory snapshot or `getMemories`. Ambiguous targets should prompt clarification.
 
 Facts live in the `memories` table in the existing SQLite database. This first version allows 50 facts, each up to 300 characters, and deduplicates saves after normalizing whitespace and letter casing. At capacity, saves fail explicitly; existing memories are not silently evicted. Current facts are supplied to each chat model request, so a new chat can use them without the original conversation. Memory changes from scheduled events are blocked. Explicit-request interpretation is handled by the model instructions; automatic fact extraction is not enabled.
 
