@@ -5,6 +5,7 @@ import { toolDefinitions } from "./tools/toolDefinitions";
 import { ModelResponse } from "../types/modelResponseType";
 import type { GenerationOptions } from "../types/generationType";
 import { requestOllama } from "./providers/ollama";
+import { memoryContext } from "./memory/longTermMemoryStore";
 
 type ModelRequest = {
   messages: Message[];
@@ -31,9 +32,16 @@ export function generateResponse(
   messages: Message[],
   options: GenerationOptions = {}
 ): Promise<ModelResponse> {
+  const savedFacts = memoryContext();
   return requestModel(
     {
-      messages: [{ role: "system", content: NOVA_SYSTEM_PROMPT }, ...messages],
+      messages: [
+        { role: "system", content: NOVA_SYSTEM_PROMPT },
+        ...messages,
+        ...(savedFacts
+          ? [{ role: "system" as const, content: savedFacts }]
+          : [])
+      ],
       tools: toolDefinitions,
       stream: Boolean(options.onContent) || MODEL_CONFIG.stream,
       think: MODEL_CONFIG.think,

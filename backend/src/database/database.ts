@@ -10,6 +10,13 @@ export const db = new Database(databasePath);
 db.pragma("journal_mode = WAL");
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content TEXT NOT NULL,
+    normalized_content TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     conversation_id INTEGER NOT NULL,

@@ -8,7 +8,8 @@
     "dev": "tsx watch --env-file=.env src/server.ts",
     "start": "node dist/server.js",
     "build": "tsc",
-    "benchmark:model": "tsx scripts/benchmarkModel.ts"
+    "benchmark:model": "tsx scripts/benchmarkModel.ts",
+    "smoke:memory": "tsx scripts/smokeMemory.ts"
   },
   "repository": {
     "type": "git",

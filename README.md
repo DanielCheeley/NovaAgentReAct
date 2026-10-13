@@ -17,6 +17,20 @@ Run these from the repository root:
 
 The existing workspace-specific build and backend start commands remain available. Backend development uses `backend/.env`; model settings are in `novaConfig.ts`. The frontend HTTP and WebSocket addresses share `BACKEND_URL` in `frontend/src/communication/api.ts`.
 
+## Long-term memory
+
+Nova supports explicit chat controls for saved facts shared across conversations and restarts:
+
+- "Remember that I prefer short answers" saves a fact using `rememberMemory`.
+- "What do you remember about me?" lists saved facts using `getMemories`.
+- "Forget that I prefer short answers" identifies the fact with `getMemories` and deletes it using `forgetMemory`. Ambiguous targets should prompt clarification.
+
+Facts live in the `memories` table in the existing SQLite database. This first version allows 50 facts, each up to 300 characters, and deduplicates saves after normalizing whitespace and letter casing. At capacity, saves fail explicitly; existing memories are not silently evicted. Current facts are supplied to each chat model request, so a new chat can use them without the original conversation. Memory changes from scheduled events are blocked. Explicit-request interpretation is handled by the model instructions; automatic fact extraction is not enabled.
+
+Forgetting deletes the saved fact, not past chat messages that mention it. Deleting a conversation leaves shared memory intact. To correct a fact, ask Nova to forget the old fact and remember its replacement. These are chat tools; there is no separate memory settings screen yet.
+
+Run `npm run smoke:memory --workspace=backend` to check explicit saving, listing, recall in a new chat, no automatic saving of casual facts, and forgetting against the configured Ollama model. It uses and cleans up a disposable database. The initial implementation passed this live check, all 50 regression tests, and both workspace builds.
+
 ## Frontend organization
 
 | File or directory | Responsibility |
