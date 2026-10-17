@@ -22,7 +22,7 @@ export const toolDefinitions = [
     function: {
       name: "getMemories",
       description:
-        "List the current saved long-term facts shared across chats, including their IDs. Use when the user asks what you remember or before forgetting a saved fact. This list does not include ordinary chat history or reminders.",
+        "List the current saved long-term facts shared across chats, including their IDs. Use when the user asks what you remember or to identify a fact to update or forget. This list does not include ordinary chat history or reminders.",
       parameters: { type: "object", properties: {} }
     }
   },
@@ -31,7 +31,7 @@ export const toolDefinitions = [
     function: {
       name: "forgetMemory",
       description:
-        "Required to actually forget a saved fact when the user asks to forget or remove it, including 'forget that'. A text reply does not delete memory. Use the matching ID from Current saved facts or getMemories; never invent IDs. Call directly when the target is clear; ask for clarification if multiple facts match. Confirm deletion only after this tool succeeds. Deleting a saved fact does not erase existing chat messages. To correct a saved fact, forget the old one and save the explicitly requested replacement.",
+        "Required to actually forget a saved fact when the user asks to forget or remove it, including 'forget that'. A text reply does not delete memory. Use the matching ID from Current saved facts or getMemories; never invent IDs. Call directly when the target is clear; ask for clarification if multiple facts match. Confirm deletion only after this tool succeeds. Deleting a saved fact does not erase existing chat messages. Use updateMemory for corrections.",
       parameters: {
         type: "object",
         properties: {
@@ -41,6 +41,29 @@ export const toolDefinitions = [
           }
         },
         required: ["memoryId"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "updateMemory",
+      description:
+        "Replace one saved fact ONLY when the user explicitly asks to correct or update it. Requires getMemories in this request first; use the verified ID from that result and never invent IDs. After listing, call updateMemory when the target is clear; ask if ambiguous. A listing alone does not complete a correction. Preserve unrelated facts. Confirm the correction only after this tool succeeds. Maximum 300 characters. A conflict with another saved fact fails without changing either fact. Never update from casual conversation or scheduled events.",
+      parameters: {
+        type: "object",
+        properties: {
+          memoryId: {
+            type: "integer",
+            description: "Verified ID of the saved fact to correct."
+          },
+          content: {
+            type: "string",
+            description:
+              "The complete replacement fact explicitly requested by the user."
+          }
+        },
+        required: ["memoryId", "content"]
       }
     }
   },

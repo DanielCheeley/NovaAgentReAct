@@ -10,6 +10,7 @@ process.env.NOVA_DATABASE_PATH = path.join(directory, "test.db");
 const { db } = await import("../src/database/database");
 const {
   rememberMemory,
+  updateMemory,
   getMemories,
   forgetMemory,
   memoryContext,
@@ -51,6 +52,151 @@ test("facts persist on disk independently of conversations and duplicate saves",
     reopened.close();
   }
   assert.equal(getMemories().length, 1);
+});
+
+test("updates persist with the same identity and work at capacity", () => {
+  const original = rememberMemory("I prefer short answers.").memory;
+  for (let i = 1; i < MAX_MEMORIES; i++) rememberMemory(`Fact ${i}`);
+  const updated = updateMemory(
+    original.id,
+    "  I prefer  detailed answers. "
+  ).memory;
+  assert.deepEqual(updated, {
+    ...original,
+    content: "I prefer detailed answers."
+  });
+  assert.equal(getMemories().length, MAX_MEMORIES);
+  assert.equal(
+    rememberMemory("i prefer detailed answers.").memory.id,
+    original.id
+  );
+  const reopened = new Database(process.env.NOVA_DATABASE_PATH!);
+  try {
+    assert.deepEqual(
+      reopened
+        .prepare("SELECT content FROM memories WHERE id = ?")
+        .get(original.id),
+      {
+        content: "I prefer detailed answers."
+      }
+    );
+  } finally {
+    reopened.close();
+  }
+});
+
+test("invalid updates and duplicate conflicts preserve all facts", () => {
+  const first = rememberMemory("First fact").memory;
+  rememberMemory("Second fact");
+  const before = getMemories();
+  for (const id of [null, "1", 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])
+    assert.throws(() => updateMemory(id, "Replacement"), /valid memory ID/);
+  assert.throws(
+    () => updateMemory(first.id + 1000, "Replacement"),
+    /no longer exists/
+  );
+  for (const content of [null, 1, " ", "x".repeat(301)])
+    assert.throws(() => updateMemory(first.id, content));
+  assert.throws(
+    () => updateMemory(first.id, " SECOND  fact "),
+    /already contains/
+  );
+  assert.deepEqual(getMemories(), before);
+  assert.deepEqual(updateMemory(first.id, "First fact").memory, first);
+});
+
+test("agent requires a fresh listing before corrections and new chat context contains only the replacement", async () => {
+  const original = rememberMemory("I prefer short answers.").memory;
+  let step = 0;
+  const result = await runAgent(
+    [
+      {
+        role: "user",
+        content: "Update my saved preference to detailed answers."
+      }
+    ],
+    1,
+    async () =>
+      step++ < 2
+        ? {
+            content: "",
+            tool_calls: [
+              {
+                id: "update",
+                function: {
+                  index: 0,
+                  name: "updateMemory",
+                  arguments: {
+                    memoryId: original.id,
+                    content: "I prefer detailed answers."
+                  }
+                }
+              }
+            ]
+          }
+        : { content: "Updated." }
+  );
+  assert.equal(step, 3);
+  assert.deepEqual(
+    result.messages.filter((m) => m.role === "tool").map((m) => m.tool_name),
+    ["getMemories", "updateMemory"]
+  );
+  assert.ok(
+    result.messages.some(
+      (m) => m.tool_name === "updateMemory" && JSON.parse(m.content).success
+    )
+  );
+  assert.deepEqual(getMemories(), [
+    { ...original, content: "I prefer detailed answers." }
+  ]);
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init!.body as string);
+    const snapshot = body.messages.find((m: { content: string }) =>
+      m.content.startsWith("Current saved facts shared across chats")
+    );
+    assert.match(snapshot.content, /detailed answers/);
+    assert.doesNotMatch(snapshot.content, /short answers/);
+    return Response.json({ message: { content: "Detailed reply." } });
+  };
+  await generateResponse([{ role: "user", content: "Hello from a new chat" }]);
+  for (const context of [{}, { memoryWritesAllowed: false }]) {
+    assert.equal(
+      (
+        await tools.updateMemory.execute(
+          { memoryId: original.id, content: "Blocked" },
+          context
+        )
+      ).success,
+      false
+    );
+  }
+  assert.equal(
+    (
+      await tools.updateMemory.execute(
+        { memoryId: original.id, content: "" },
+        { memoryWritesAllowed: true }
+      )
+    ).success,
+    false
+  );
+  await runAgent(
+    [{ role: "system", content: "Scheduled event" }],
+    2,
+    async () => ({
+      content: "",
+      tool_calls: [
+        {
+          id: "blocked",
+          function: {
+            index: 0,
+            name: "updateMemory",
+            arguments: { memoryId: original.id, content: "Blocked" }
+          }
+        }
+      ]
+    })
+  );
+  assert.equal(getMemories()[0].content, "I prefer detailed answers.");
 });
 
 test("forget deletes only the chosen saved fact and leaves chat history intact", () => {

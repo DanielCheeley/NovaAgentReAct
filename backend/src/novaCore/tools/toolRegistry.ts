@@ -8,6 +8,7 @@ import { cancelTask } from "./cancelTask";
 import { rescheduleTask } from "./rescheduleTask";
 import {
   rememberMemory,
+  updateMemory,
   getMemories,
   forgetMemory
 } from "../memory/longTermMemoryStore";
@@ -41,6 +42,14 @@ export const tools: Record<string, ToolDefinition> = {
     return toolSuccess(rememberMemory(args.content));
   }),
   getMemories: defineTool(async () => toolSuccess({ memories: getMemories() })),
+  updateMemory: defineTool(
+    async (args, context) => {
+      if (!context.memoryWritesAllowed)
+        return toolFailure("Only a user request can update a memory.");
+      return toolSuccess(updateMemory(args.memoryId, args.content));
+    },
+    ["getMemories"]
+  ),
   forgetMemory: defineTool(async (args, context) => {
     if (!context.memoryWritesAllowed)
       return toolFailure("Only a user request can forget a memory.");
