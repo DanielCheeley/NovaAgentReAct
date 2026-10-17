@@ -42,7 +42,14 @@ export function generateResponse(
           ? [{ role: "system" as const, content: savedFacts }]
           : [])
       ],
-      tools: toolDefinitions,
+      tools: options.memorySelectionHandled
+        ? toolDefinitions.filter(
+            ({ function: tool }) =>
+              !["rememberMemory", "updateMemory", "forgetMemory"].includes(
+                tool.name
+              )
+          )
+        : toolDefinitions,
       stream: Boolean(options.onContent) || MODEL_CONFIG.stream,
       think: MODEL_CONFIG.think,
       options: { temperature: MODEL_CONFIG.temperature }

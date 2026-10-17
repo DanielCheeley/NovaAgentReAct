@@ -22,6 +22,7 @@ export type RequestTiming = {
 };
 
 export type GenerationOptions = {
+  memorySelectionHandled?: boolean;
   signal?: AbortSignal;
   onContent?: (content: string) => void;
   onModelTiming?: (timing: ModelTiming) => void;

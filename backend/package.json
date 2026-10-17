@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "build": "tsc",
     "benchmark:model": "tsx scripts/benchmarkModel.ts",
-    "smoke:memory": "tsx scripts/smokeMemory.ts"
+    "smoke:memory": "tsx scripts/smokeMemory.ts",
+    "smoke:memory:auto": "tsx scripts/smokeAutomaticMemory.ts"
   },
   "repository": {
     "type": "git",

@@ -8,11 +8,17 @@ import { reminderAdapter } from "./actions/reminders";
 import { toolFailure } from "../types/toolTypes";
 import type { GenerationOptions, ToolTiming } from "../types/generationType";
 import type { ToolDefinition } from "../types/toolTypes";
+import { validateMemoryWrite } from "./memory/memoryWritePolicy";
+import type { selectAutomaticMemory } from "./memory/automaticMemory";
+import { getMemories } from "./memory/longTermMemoryStore";
+import { randomUUID } from "node:crypto";
 
 export type AgentOptions = GenerationOptions & {
   onRecord?: (message: Message) => void;
   onLoopComplete?: (content: string) => void;
   onToolTiming?: (timing: ToolTiming) => void;
+  validateMemoryWrite?: typeof validateMemoryWrite;
+  selectMemory?: typeof selectAutomaticMemory;
 };
 
 const logger = debug("NovaAgent:Agent");
@@ -28,6 +34,8 @@ export async function runAgent(
   const generatedMessages: Message[] = [];
   const executedTools = new Set<string>();
   const memoryWritesAllowed = messages.at(-1)?.role === "user";
+  const memorySource = memoryWritesAllowed ? messages.at(-1)!.content : "";
+  let memorySelectionHandled = false;
   const actions = new ActionCoordinator(
     [reminderAdapter(conversationId)],
     messages,
@@ -55,6 +63,38 @@ export async function runAgent(
   ) {
     options.signal?.throwIfAborted();
     const started = performance.now();
+    if (
+      memorySelectionHandled &&
+      (name === "rememberMemory" ||
+        name === "updateMemory" ||
+        name === "forgetMemory")
+    )
+      return toolFailure(
+        "Memory selection has already completed for this user message. Do not repeat the write."
+      );
+    if (
+      memoryWritesAllowed &&
+      (name === "rememberMemory" || name === "updateMemory")
+    ) {
+      try {
+        await (options.validateMemoryWrite ?? validateMemoryWrite)(
+          {
+            userMessage: memorySource,
+            content: args.content,
+            operation: name
+          },
+          options.signal
+        );
+      } catch (error) {
+        const failure = toolFailure(error);
+        options.onToolTiming?.({
+          name,
+          elapsedMs: performance.now() - started,
+          success: false
+        });
+        return failure;
+      }
+    }
     const result = await executeTool(tool, args, {
       conversationId,
       signal: options.signal,
@@ -69,6 +109,57 @@ export async function runAgent(
   }
 
   try {
+    // Run selection once before dialogue. A conversational acknowledgment can
+    // no longer silently replace a selected save/correction.
+    if (memoryWritesAllowed && options.selectMemory) {
+      let outcome =
+        "No fact was saved, updated, or forgotten. If a forget/correction target is ambiguous, ask the user which saved fact they mean.";
+      async function recordMemoryTool(
+        name: string,
+        args: Record<string, unknown>
+      ) {
+        const id = randomUUID();
+        record({
+          role: "assistant",
+          content: "",
+          tool_calls: [{ id, function: { index: 0, name, arguments: args } }]
+        });
+        const result = await executeTimed(name, tools[name], args);
+        record({
+          role: "tool",
+          tool_call_id: id,
+          tool_name: name,
+          content: JSON.stringify(result)
+        });
+        if (result.success) executedTools.add(name);
+        return result;
+      }
+      try {
+        const selection = await options.selectMemory(
+          memorySource,
+          getMemories(),
+          options.signal
+        );
+        options.signal?.throwIfAborted();
+        if (selection.operation !== "none") {
+          if (selection.operation === "updateMemory") {
+            const listing = await recordMemoryTool("getMemories", {});
+            if (!listing.success) throw new Error(listing.error);
+          }
+          const { operation, ...args } = selection;
+          const result = await recordMemoryTool(operation, args);
+          outcome = `The ${operation} tool outcome for this message: ${JSON.stringify(result)}.`;
+        }
+      } catch (error) {
+        options.signal?.throwIfAborted();
+        outcome = `No automatic memory change completed: ${JSON.stringify(toolFailure(error))}.`;
+      }
+      memorySelectionHandled = true;
+      messages.push({
+        role: "system",
+        content: `${outcome} Memory selection is finished for this turn; do not call rememberMemory, updateMemory, or forgetMemory again. Confirm only a successful recorded change. If nothing changed, do not claim a save, correction, or deletion. Continue answering the user's message naturally; if they explicitly requested a memory change that failed, explain that it did not complete. Listing remains available.`
+      });
+    }
     // Supply fresh clock data even if the model forgets to request it.
     const clock = await executeTimed(
       "getDateAndTime",
@@ -92,7 +183,10 @@ export async function runAgent(
     for (let i = 0; i < MAX_LOOPS; i++) {
       options.signal?.throwIfAborted();
       options.onContent?.("");
-      const response = await respond(messages, options);
+      const response = await respond(messages, {
+        ...options,
+        memorySelectionHandled
+      });
       options.signal?.throwIfAborted();
 
       if (!response.tool_calls || response.tool_calls.length === 0) {

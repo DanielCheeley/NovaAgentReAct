@@ -57,11 +57,11 @@ try {
   const correctedRecall = await turn(3, "What is my favorite tree?");
   assert.match(correctedRecall, /maple/i);
   assert.doesNotMatch(correctedRecall, /ginkgo/i);
-  await turn(2, "I also enjoy tea.");
+  await turn(2, "Just for today, I feel like having tea.");
   assert.equal(
     getMemories().length,
     1,
-    "Casual facts must not be saved automatically"
+    "Temporary facts must not be saved automatically"
   );
   await turn(1, "forget that");
   assert.equal(getMemories().length, 0, "Explicit forget must delete the fact");

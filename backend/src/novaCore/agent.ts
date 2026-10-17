@@ -5,6 +5,7 @@ import { NovaEvent } from "../types/eventType";
 import { runAgent, type AgentOptions } from "./agentLoop";
 import { inConversation } from "./conversationQueue";
 import { generateResponse } from "./model";
+import { selectAutomaticMemory } from "./memory/automaticMemory";
 
 // Preserve the existing entry point for callers.
 export { runAgent } from "./agentLoop";
@@ -36,6 +37,7 @@ export async function handleMessage(
         conversationId,
         generateResponse,
         {
+          selectMemory: selectAutomaticMemory,
           ...options,
           onLoopComplete: (content) => {
             partial = "";

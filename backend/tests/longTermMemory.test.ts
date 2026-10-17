@@ -17,7 +17,14 @@ const {
   MAX_MEMORIES
 } = await import("../src/novaCore/memory/longTermMemoryStore");
 const { tools } = await import("../src/novaCore/tools/toolRegistry");
-const { runAgent } = await import("../src/novaCore/agentLoop");
+const { runAgent: runAgentWithPolicy } =
+  await import("../src/novaCore/agentLoop");
+// Storage/loop tests inject eligibility; the policy has its own transport tests.
+const runAgent: typeof runAgentWithPolicy = (messages, id, respond, options) =>
+  runAgentWithPolicy(messages, id, respond, {
+    validateMemoryWrite: async () => {},
+    ...options
+  });
 const { generateResponse } = await import("../src/novaCore/model");
 const { addMessage, deleteConversation } =
   await import("../src/novaCore/memory/conversationStore");
@@ -33,6 +40,164 @@ after(() => {
   globalThis.fetch = nativeFetch;
   db.close();
   rmSync(directory, { recursive: true, force: true });
+});
+
+test("selected facts persist even when dialogue returns no tool calls, and corrections list first", async () => {
+  let selections = 0;
+  const saved = await runAgentWithPolicy(
+    [{ role: "user", content: "I generally prefer concise answers." }],
+    1,
+    async (_messages, options) => {
+      assert.equal(options?.memorySelectionHandled, true);
+      assert.equal(getMemories().length, 1, "Save must finish before dialogue");
+      return { content: "Got it." };
+    },
+    {
+      selectMemory: async () => {
+        selections++;
+        return {
+          operation: "rememberMemory",
+          content: "User prefers concise answers."
+        };
+      },
+      validateMemoryWrite: async () => {}
+    }
+  );
+  assert.equal(selections, 1);
+  assert.ok(
+    saved.messages.some(
+      (m) => m.tool_name === "rememberMemory" && JSON.parse(m.content).success
+    )
+  );
+  const id = getMemories()[0].id;
+  const corrected = await runAgentWithPolicy(
+    [{ role: "user", content: "I now prefer detailed answers." }],
+    2,
+    async () => ({ content: "Updated." }),
+    {
+      selectMemory: async () => ({
+        operation: "updateMemory",
+        content: "User prefers detailed answers.",
+        memoryId: id
+      }),
+      validateMemoryWrite: async () => {}
+    }
+  );
+  assert.deepEqual(
+    corrected.messages.filter((m) => m.role === "tool").map((m) => m.tool_name),
+    ["getMemories", "updateMemory"]
+  );
+  assert.equal(getMemories()[0].id, id);
+  assert.equal(getMemories()[0].content, "User prefers detailed answers.");
+  const forgotten = await runAgentWithPolicy(
+    [{ role: "user", content: "Forget that" }],
+    2,
+    async () => ({ content: "Forgotten." }),
+    {
+      selectMemory: async () => ({ operation: "forgetMemory", memoryId: id })
+    }
+  );
+  assert.deepEqual(getMemories(), []);
+  assert.ok(
+    forgotten.messages.some(
+      (m) => m.tool_name === "forgetMemory" && JSON.parse(m.content).success
+    )
+  );
+});
+
+test("dialogue cannot repeat save/update after selection has completed", async () => {
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init!.body as string);
+    const names = body.tools.map(
+      (tool: { function: { name: string } }) => tool.function.name
+    );
+    assert.ok(!names.includes("rememberMemory"));
+    assert.ok(!names.includes("updateMemory"));
+    assert.ok(names.includes("getMemories"));
+    assert.ok(!names.includes("forgetMemory"));
+    return Response.json({ message: { content: "Hello." } });
+  };
+  await generateResponse([{ role: "user", content: "Hello" }], {
+    memorySelectionHandled: true
+  });
+});
+
+test("selection failures, excluded facts, cancellation and background events cannot save", async () => {
+  for (const selectMemory of [
+    async () => ({ operation: "none" as const }),
+    async (): Promise<never> => {
+      throw new Error("Selector offline");
+    }
+  ]) {
+    await runAgentWithPolicy(
+      [{ role: "user", content: "Hello" }],
+      1,
+      async () => ({ content: "Hello." }),
+      { selectMemory }
+    );
+    assert.deepEqual(getMemories(), []);
+  }
+  const controller = new AbortController();
+  const result = await runAgentWithPolicy(
+    [{ role: "user", content: "I prefer green." }],
+    1,
+    async () => ({ content: "Hello." }),
+    {
+      signal: controller.signal,
+      selectMemory: async () => {
+        controller.abort();
+        return { operation: "rememberMemory", content: "User prefers green." };
+      }
+    }
+  );
+  assert.equal(result.cancelled, true);
+  await runAgentWithPolicy(
+    [{ role: "system", content: "Scheduled event" }],
+    1,
+    async () => ({ content: "Hello." }),
+    {
+      selectMemory: async () => {
+        assert.fail("Background events must not run selection");
+      }
+    }
+  );
+  assert.deepEqual(getMemories(), []);
+});
+
+test("rejected eligibility checks prevent persistence and success claims", async () => {
+  for (const reason of ["Not eligible", "Reviewer unavailable"]) {
+    const result = await runAgentWithPolicy(
+      [{ role: "user", content: "I prefer red but do not remember that." }],
+      1,
+      async () => ({
+        content: "",
+        tool_calls: [
+          {
+            id: "save",
+            function: {
+              index: 0,
+              name: "rememberMemory",
+              arguments: { content: "User prefers red" }
+            }
+          }
+        ]
+      }),
+      {
+        validateMemoryWrite: async () => {
+          throw new Error(reason);
+        }
+      }
+    );
+    assert.equal(getMemories().length, 0);
+    assert.ok(
+      result.messages.some(
+        (m) =>
+          m.tool_name === "rememberMemory" &&
+          JSON.parse(m.content).success === false
+      )
+    );
+    assert.match(result.response, new RegExp(reason));
+  }
 });
 
 test("facts persist on disk independently of conversations and duplicate saves", () => {
