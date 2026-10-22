@@ -44,3 +44,33 @@ db.exec(`
     FOREIGN KEY (conversation_id) REFERENCES conversations(id)
   );
 `);
+
+// Add semantic metadata atomically while retaining existing facts and IDs.
+db.transaction(() => {
+  const columns = new Set(
+    (db.prepare("PRAGMA table_info(memories)").all() as { name: string }[]).map(
+      ({ name }) => name
+    )
+  );
+  for (const [name, definition] of [
+    [
+      "subject",
+      "TEXT NOT NULL DEFAULT 'user' CHECK (subject IN ('user', 'nova'))"
+    ],
+    [
+      "status",
+      "TEXT NOT NULL DEFAULT 'established' CHECK (status IN ('tentative', 'established'))"
+    ],
+    [
+      "origin",
+      "TEXT NOT NULL DEFAULT 'legacy' CHECK (origin IN ('legacy', 'explicit'))"
+    ],
+    ["updated_at", "TEXT"]
+  ]) {
+    if (!columns.has(name))
+      db.exec(`ALTER TABLE memories ADD COLUMN ${name} ${definition}`);
+  }
+  db.exec(
+    "UPDATE memories SET updated_at = created_at WHERE updated_at IS NULL"
+  );
+}).immediate();

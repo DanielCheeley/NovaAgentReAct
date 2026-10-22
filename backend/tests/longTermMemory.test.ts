@@ -4,11 +4,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { execFileSync } from "node:child_process";
 
 const directory = mkdtempSync(path.join(tmpdir(), "nova-memory-test-"));
 process.env.NOVA_DATABASE_PATH = path.join(directory, "test.db");
 const { db } = await import("../src/database/database");
 const {
+  updateMemory,
   rememberMemory,
   getMemories,
   forgetMemory,
@@ -208,4 +210,86 @@ test("agent records save/list/forget results and injects fresh facts across chat
     return Response.json({ message: { content: "Hello." } });
   };
   await generateResponse([{ role: "user", content: "New chat" }]);
+});
+
+test("semantic records preserve uncertainty and correction is atomic", async () => {
+  const first = rememberMemory("Nova may enjoy dinosaurs", {
+    subject: "nova",
+    status: "tentative"
+  }).memory;
+  assert.equal(first.type, "Semantic");
+  assert.equal(first.origin, "explicit");
+  assert.equal(first.subject, "nova");
+  assert.equal(first.status, "tentative");
+  const second = rememberMemory("Another fact").memory;
+  assert.throws(
+    () => updateMemory(first.id, second.content),
+    /already contains/
+  );
+  assert.deepEqual(getMemories(), [first, second]);
+  for (const invalid of ["", null, "x".repeat(301)])
+    assert.throws(() => updateMemory(first.id, invalid));
+  assert.throws(() => updateMemory(999999, "Missing"), /no longer exists/);
+  const corrected = updateMemory(first.id, "Nova may enjoy fossils").memory;
+  assert.equal(corrected.id, first.id);
+  assert.equal(corrected.createdAt, first.createdAt);
+  assert.equal(corrected.status, "tentative");
+  assert.equal(corrected.subject, "nova");
+  assert.ok(corrected.updatedAt >= first.updatedAt);
+  assert.ok(memoryContext()!.includes('"status":"tentative"'));
+  assert.equal(
+    (
+      await tools.updateMemory.execute(
+        { memoryId: first.id, content: "Blocked" },
+        { memoryWritesAllowed: false }
+      )
+    ).success,
+    false
+  );
+  assert.deepEqual(getMemories(), [corrected, second]);
+  for (let i = 2; i < MAX_MEMORIES; i++) rememberMemory(`Capacity fact ${i}`);
+  assert.equal(
+    updateMemory(first.id, "Correction at capacity").memory.id,
+    first.id
+  );
+});
+
+test("legacy schema migrates without losing facts and survives a second startup", () => {
+  const legacyPath = path.join(directory, "legacy.db");
+  const legacy = new Database(legacyPath);
+  legacy.exec(`CREATE TABLE memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL,
+    normalized_content TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL
+  ); INSERT INTO memories VALUES (42, 'Old fact', 'old fact', '2026-01-01T00:00:00.000Z');`);
+  legacy.close();
+  for (let startup = 0; startup < 2; startup++) {
+    execFileSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "-e",
+        "await import('./src/database/database.ts').then(({db}) => db.close())"
+      ],
+      { env: { ...process.env, NOVA_DATABASE_PATH: legacyPath } }
+    );
+  }
+  const reopened = new Database(legacyPath);
+  try {
+    assert.deepEqual(reopened.prepare("SELECT * FROM memories").all(), [
+      {
+        id: 42,
+        content: "Old fact",
+        normalized_content: "old fact",
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+        subject: "user",
+        status: "established",
+        origin: "legacy"
+      }
+    ]);
+  } finally {
+    reopened.close();
+  }
 });

@@ -1,0 +1,127 @@
+# Nova long-term memory and automation roadmap
+
+Build a small conversation-to-memory loop first, then expand it into semantic, episodic, and procedural memory with automated review. This roadmap covers memory storage, learning, recall, revision, and forgetting only. UI, independent activities, proactive conversation, research, and action permissions are deferred to a separate future plan. Existing code can change when that makes the design simpler. Preserve stored data through explicit migrations rather than preserving every current abstraction. Each numbered step is a separate reviewable change; stop and inspect behavior before starting the next one.
+
+## Current starting point (inspected October 21, 2026)
+
+- SQLite stores saved facts with an ID, content, normalized content, and creation time.
+- `longTermMemoryStore.ts` implements save, list, forget, duplicate protection, and context injection. Current limits are 50 facts and 300 characters per fact.
+- Normal chat can use explicit memory tools. Scheduled contexts cannot write through those tools.
+- Conversations and messages are persisted with timestamps and message IDs, although the current conversation reader does not expose all of that metadata.
+- Existing tests cover persistence, deletion, duplicates, limits, and tool behavior.
+- This checkout does not currently contain the idle reviewer described in older project notes. Recheck the implementation baseline before coding; do not assume another branch's work is present.
+- There is a pre-existing local edit adding a memory type to `SavedMemory`; it is not backed by the SQL schema or readers yet. Integrate or replace it deliberately with the user’s work preserved.
+
+## 1. Establish the smallest useful semantic record
+
+Keep explicit save/list/forget working. Decide whether to extend the current table or migrate it into a dedicated semantic table; prefer the simpler implementation after checking callers.
+
+Add only what the first loop requires: subject (`user` or `nova` initially), tentative/established status, and update time. Keep existing facts on migration; mark their origin as legacy rather than inventing evidence for them. Add an atomic correction operation so replacing a fact cannot leave a half-finished delete/save pair.
+
+Functions: `saveBelief`, `listBeliefs`, `updateBelief`, `deleteBelief`. Existing tool names can remain as adapters if useful.
+
+Done when: old records survive migration and restart; explicit corrections and deletions affect the intended record; duplicate/conflicting writes fail cleanly. No autonomous inference yet.
+
+### Step 1 implementation checkpoint (October 22, 2026)
+
+Implemented in the current working tree using the existing `memories` table and tool adapters. Semantic records now carry subject, tentative/established status, origin, and update time. Existing rows retain IDs, content, and creation times and are labeled `legacy`; the compatibility defaults are user/established, not newly inferred evidence. New explicit saves are labeled `explicit`. The existing local memory-type sketch is integrated as `Semantic`; episodes and habits will have separate storage in later steps.
+
+`updateMemory` corrects a verified record atomically, retaining its identity, subject, status, and creation time. Duplicate replacements fail without deleting anything. Internal saves accept subject/status metadata; ordinary explicit tools retain their existing defaults. No inference or idle automation is enabled.
+
+Validation: seven focused memory tests pass, including legacy migration across two process startups, uncertainty, correction at capacity, duplicate rollback, and blocked background writes. Backend/frontend builds pass. The full suite currently reports 50/52 passing; two HTTP streaming tests fail with `fetch failed` and remain unresolved. Live model behavior is still to be tested before step 2.
+
+Manual checkpoint: explicitly save a disposable fact, list memories, correct it, start a fresh chat and ask for it, then forget it and list again. Inspect tool results, especially the stable ID on correction. Use disposable data for this check.
+
+## 2. Store one meaningful episode
+
+Add a separate episode record: event time, recorded time, source conversation/message references, structured account of what happened, participants, observed reactions, Nova's reported reaction, outcome, significance, and a first-person account. Unknown reactions stay unknown. Distinguish observed events from Nova's interpretations.
+
+Initially save an episode through a backend development command or focused test using a real conversation segment. No frontend or automatic event detection yet. Do not force episodes through the existing 300-character fact limit.
+
+Functions: `saveEpisode`, `getEpisode`, `listEpisodes`, `deleteEpisode`.
+
+Done when: a meaningful interaction persists with its source and both representations; it can be retrieved after restart; saving it creates no preference automatically.
+
+## 3. Review one conversation segment into episodes
+
+Implement `reviewConversationSegment`: read an identified source range, produce zero or more episode candidates, validate their sources and structure, and save accepted episodes. Routine small talk can produce nothing. Use a development command to trigger the full operation first, without adding a separate approval/preview workflow.
+
+Record the reviewed source range so rerunning it does not create duplicate experiences. Make writes atomic and reject stale results if relevant source data changed. Allow source inspection when a summary is insufficient.
+
+Done when: meaningful material produces an episode, trivial material can produce none, repeated review is idempotent, invented observations are rejected, and model failures leave persistence unchanged. Validate model judgment with actual examples as well as deterministic tests.
+
+## 4. Learn one preference from episodes
+
+Start with Nova's own interests. `proposeBeliefChange` gathers related episodes and presents evidence and reasoning. `evaluateBeliefProposal` lets Nova accept, reject, narrow, or reconsider that interpretation. These are logical stages, not necessarily separate agents or infrastructure. The resulting write still goes through deterministic validation; her decision does not bypass evidence checks.
+
+Link each belief to supporting episode IDs. Usually require distinct experiences; allow an exceptional impactful experience with an explicit rationale. Reprocessing one episode or repeatedly thinking the same claim is not independent evidence. Weak proposals can be reconsidered and remain tentative or be discarded. Define promotion policy as a small configurable rule, not an arbitrary model confidence number.
+
+Done when: separate dinosaur experiences can produce a tentative interest; Nova can reject the reviewer’s suggestion; one passing mention and repeated review cannot establish a preference; she does not infer the user's preferences from her own thoughts.
+
+## 5. Recall learned memories in ordinary chat
+
+Add `getRelevantBeliefs` and basic episode lookup so a fresh conversation can use a small relevant set of stored memories. Keep tentative beliefs visibly uncertain to the model. Retrieve episodes separately from general beliefs so an interpretation is not mistaken for an observed event. Avoid injecting every memory into every prompt.
+
+Done when: a fresh conversation can recall an episode and a supported preference, distinguish tentative from established knowledge, and acknowledge missing information. Verify retrieval and persisted records as well as the response.
+
+This is the first useful milestone: conversation -> meaningful episode -> evidence-backed belief -> fresh-chat recall. Automated activity selection and small-talk topic selection are outside this roadmap.
+
+## 6. Let new experience revise understanding
+
+Add `reconsiderBelief` for supporting or conflicting evidence. A new discovery may narrow an interest, weaken it, or change it; one unpleasant detail need not reverse the entire preference. For user facts, distinguish temporary context from lasting change. Keep episodes' original accounts and append later interpretations rather than rewriting the original event.
+
+Deletion removes the selected memory and dependent copies of its contents, then reconsiders affected conclusions from remaining evidence. If original conversation content remains eligible for review, use content-free exclusion metadata or another explicit source policy to prevent recreating a deliberately deleted memory. Do not retain the deleted text as a hidden archive. Document backup limitations separately when implementing deletion.
+
+Done when: evidence can change an established preference; deletion removes its support and triggers reconsideration; replaying the same old source cannot silently resurrect it.
+
+## 7. Automate the proven review loop
+
+Trigger the existing review operation after new conversation activity becomes idle. Use a configurable idle delay. Review only new source ranges plus relevant existing memories. Keep a durable checkpoint, cancel stale work on new activity, and isolate review failures from chat. Route automatic writes through one coordinator; explicit commands must use compatible validation and invalidate stale reviews. Do not add a second independent automatic writer.
+
+The memory reviewer and Nova's evaluation are separate roles that initially use the same model with different prompts and calls. The reviewer presents a conversation summary, related memories, source references, and its reasoning. Nova may accept, reject, narrow, or reconsider the proposal and can inspect original messages when needed. Code validates sources, state, and writes regardless of either role's output. A different review model can be evaluated later; it is not required.
+
+Persist accepted changes and the source checkpoint atomically. Failed or interrupted work must remain eligible for a bounded retry; unchanged sources must not be repeatedly reprocessed. Allow a successful review to save nothing. On restart, resume pending work without duplicating episodes or evidence.
+
+Done when: chat -> idle -> review -> Nova's evaluation -> validated persistence -> fresh-chat recall works end to end, including no-save decisions, correction, cancellation, retry, restart, and no duplicate processing. This automates memory processing only.
+
+## 8. Add tentative review and forgetting
+
+Implement `reviewTentativeBeliefs`, `recordMemoryUse`, and `applyMemoryDecay`. Start with explicit simulated timestamps in tests and then a periodic runner. Review tentative beliefs periodically and on new evidence; expire unsupported ones.
+
+Separate retention strength from evidential support. Useful recall boosts retention without making a claim more true. Start by testing the suggested boost `min(maxStrength, currentStrength * 1.3)`; tune decay so repeated automated access cannot keep everything alive forever. Listing or fetching a memory alone does not count as useful use. Require an identifiable contribution to a response, decision, or activity, deduplicated within that operation.
+
+Episodes progress from full detail to summary to deletion. Summarization actually removes superseded detail when that stage is applied; final deletion removes the summary too. Higher significance slows fading. Beliefs whose evidence disappears become tentative and may be re-established through new evidence or user confirmation. Habits can persist while remaining revisable. Do not fabricate forgotten detail.
+
+Done when: simulated time demonstrates every transition, useful recall gives only a partial boost, background review does not manufacture evidence, and lost support causes reconsideration.
+
+## 9. Add procedural memory through one conditional habit
+
+Use an initial example such as keeping debugging answers concise when the user requests it. Apply it only within ordinary user-initiated chat. Store readable guidance plus trigger conditions, exceptions, evidence, trial state, and adjustment count.
+
+Functions: `proposeHabit`, `getApplicableHabits`, `recordHabitOutcome`, `reviseHabit`. Reflection and user feedback can propose trials; evaluate them with both concrete outcomes and feedback. Allow one or two adjustments before dropping a failed trial. Do not keep a permanent failed-habit blacklist. An explicit request to stop disables the behavior immediately; resolve ambiguous references before broad changes.
+
+Done when: the habit applies in the right context, allows requests for detailed explanations as an exception, responds to correction, and stops after unsuccessful adjustments.
+
+## 10. Expand recall only as needed
+
+Use timestamps, subjects, and source/evidence links first. Resolve phrases such as yesterday/last week using the user's timezone. Ask which event the user means when candidates are ambiguous. Add search indexes or embeddings only when actual recall examples show the simpler approach is inadequate. Similarity supplies candidates, not proof.
+
+Done when: known temporal queries find the right episodes, ambiguous references cause clarification, and expired/deleted memories cannot leak through retrieval. Basic time/source lookup already exists in earlier stages; this step broadens it.
+
+## 11. Automate ongoing memory maintenance
+
+Extend the same memory coordinator with bounded jobs for tentative review, retention decay, summarization, deletion, and procedural trial evaluation. New evidence triggers relevant reconsideration; periodic maintenance handles time-based changes. Use durable progress markers and avoid overlapping jobs against the same records. Maintenance operates on existing experience; it does not generate independent experiences or new evidence by repeatedly reflecting.
+
+Expose internal run results for development inspection: sources reviewed, operations applied, skipped candidates, and failures. Avoid logging deleted memory contents. Keep operational bookkeeping separate from Nova's personal memories; it must not become a permanent failed-habit blacklist or a hidden archive.
+
+Done when: the complete memory lifecycle runs without manual review triggers, survives restart and failures, handles explicit corrections/deletions during review, and preserves normal chat responsiveness. Demonstrate the full loop using disposable data and simulated time where appropriate.
+
+The finished scope is automated semantic, episodic, and procedural memory with relevant recall and revisable learning. Build the React memory editor and autonomous activities in later roadmaps.
+
+## How to deliver each step
+
+- Make one narrow change and explain what behavior it adds.
+- Verify persistence and outcomes, not model claims. Use disposable databases for tests and migrations; never experiment against personal memories without a backup plan.
+- Use deterministic tests for storage/state transitions and a small set of live conversations for judgment and behavior. Report them separately.
+- Preserve existing chat/task behavior and unrelated local edits. Leave implementation uncommitted for review.
+- Tune policies from observed failures. Do not build an elaborate scoring system, embedding infrastructure, continuous agent, or memory UI ahead of the first learning loop.

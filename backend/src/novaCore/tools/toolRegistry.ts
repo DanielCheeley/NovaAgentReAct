@@ -7,6 +7,7 @@ import { getTasks } from "./getTasks";
 import { cancelTask } from "./cancelTask";
 import { rescheduleTask } from "./rescheduleTask";
 import {
+  updateMemory,
   rememberMemory,
   getMemories,
   forgetMemory
@@ -40,6 +41,14 @@ export const tools: Record<string, ToolDefinition> = {
       return toolFailure("Only a user request can save a memory.");
     return toolSuccess(rememberMemory(args.content));
   }),
+  updateMemory: defineTool(
+    async (args, context) => {
+      if (!context.memoryWritesAllowed)
+        return toolFailure("Only a user request can correct a memory.");
+      return toolSuccess(updateMemory(args.memoryId, args.content));
+    },
+    ["getMemories"]
+  ),
   getMemories: defineTool(async () => toolSuccess({ memories: getMemories() })),
   forgetMemory: defineTool(
     async (args, context) => {
