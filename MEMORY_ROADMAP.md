@@ -60,6 +60,16 @@ Record the reviewed source range so rerunning it does not create duplicate exper
 
 Done when: meaningful material produces an episode, trivial material can produce none, repeated review is idempotent, invented observations are rejected, and model failures leave persistence unchanged. Validate model judgment with actual examples as well as deterministic tests.
 
+### Step 3 implementation checkpoint (October 22, 2026)
+
+Added manual `reviewConversationSegment` and `npm run review:episodes --workspace=backend -- <conversationId> <firstMessageId> <lastMessageId>`. The configured Ollama model reviews a bounded source range and proposes zero to three episodes. The command writes accepted records directly; there is no preview workflow or idle trigger. No beliefs are created and ordinary chat still does not retrieve episodes.
+
+Code verifies source IDs, quote text, speaker attribution, participant names, and record structure. The whole batch and a content-free source-hash checkpoint commit atomically. New messages, source edits/deletion, cancellation, malformed output, or model failures leave no partial episode/checkpoint writes. Completed ranges survive process restart; identical or concurrent review cannot duplicate them. Overlapping completed ranges are rejected; select only new messages. Deleting an episode created by this reviewer leaves its completed-source checkpoint, preventing replay through this route. Manual episode saves predating the reviewer do not acquire checkpoints retroactively; broader deletion/source exclusion remains step 6.
+
+Validation: all 61 tests pass when local HTTP access is allowed, including durable checkpoints, concurrent review, no-save decisions, rollback, attribution, cancellation, and stale source handling. The earlier HTTP failures were caused by restricted loopback access; they pass with access enabled. Backend build and diff checks pass. `npm run smoke:episodes --workspace=backend` also passed with the actual configured model and disposable examples: a painting accomplishment produced one episode; a routine greeting produced none; replay produced no duplicates; semantic storage remained empty. These two examples establish basic behavior, not general model judgment accuracy. Quotes and IDs are mechanically checked; summary fidelity and significance still require example-based evaluation.
+
+The user-requested live snowboarding test episode (#1) was deleted and the live episode table verified empty before these checks. Live model reviewer checks used isolated test storage and did not reprocess that deleted exchange. For the next browser test, use a fresh meaningful exchange, then run the manual command against its explicit IDs. The first-person account in this route is model-generated rather than authored by the developer.
+
 ## 4. Learn one preference from episodes
 
 Start with Nova's own interests. `proposeBeliefChange` gathers related episodes and presents evidence and reasoning. `evaluateBeliefProposal` lets Nova accept, reject, narrow, or reconsider that interpretation. These are logical stages, not necessarily separate agents or infrastructure. The resulting write still goes through deterministic validation; her decision does not bypass evidence checks.

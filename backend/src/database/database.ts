@@ -25,6 +25,15 @@ db.exec(`
     account TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS episode_reviews (
+    conversation_id INTEGER NOT NULL,
+    first_message_id INTEGER NOT NULL,
+    last_message_id INTEGER NOT NULL,
+    source_hash TEXT NOT NULL,
+    reviewed_at TEXT NOT NULL,
+    PRIMARY KEY (conversation_id, first_message_id, last_message_id)
+  );
+
   CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     conversation_id INTEGER NOT NULL,

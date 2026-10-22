@@ -1,0 +1,224 @@
+import assert from "node:assert/strict";
+import { after, beforeEach, test } from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+const directory = mkdtempSync(path.join(tmpdir(), "nova-review-test-"));
+process.env.NOVA_DATABASE_PATH = path.join(directory, "test.db");
+const { db } = await import("../src/database/database");
+const { addMessage } = await import("../src/novaCore/memory/conversationStore");
+const { reviewConversationSegment } =
+  await import("../src/novaCore/memory/reviewConversationSegment");
+const { listEpisodes, deleteEpisode } =
+  await import("../src/novaCore/memory/episodeStore");
+beforeEach(() =>
+  db.exec(
+    "DELETE FROM episode_reviews; DELETE FROM episodes; DELETE FROM messages; DELETE FROM conversations;"
+  )
+);
+after(() => {
+  db.close();
+  rmSync(directory, { recursive: true, force: true });
+});
+function fixture() {
+  addMessage(1, {
+    role: "user",
+    content: "I finally finished my first painting. I feel proud."
+  });
+  addMessage(1, { role: "assistant", content: "I'm happy for you!" });
+  const ids = (
+    db.prepare("SELECT id FROM messages ORDER BY id").all() as { id: number }[]
+  ).map(({ id }) => id);
+  return {
+    segment: {
+      conversationId: 1,
+      firstMessageId: ids[0],
+      lastMessageId: ids[1]
+    },
+    candidate: {
+      sourceMessageIds: ids,
+      happened: "The user reported finishing their first painting.",
+      participants: ["user", "nova"],
+      observedReactions: [
+        { participant: "user", messageId: ids[0], quote: "I feel proud." }
+      ],
+      novaReportedReaction: { messageId: ids[1], quote: "I'm happy for you!" },
+      outcome: null,
+      significance: "medium",
+      firstPersonAccount:
+        "The user shared an accomplishment and I congratulated them."
+    }
+  };
+}
+const reviewCount = () =>
+  (
+    db.prepare("SELECT COUNT(*) AS n FROM episode_reviews").get() as {
+      n: number;
+    }
+  ).n;
+test("accepted review is atomic and repeated or overlapping review cannot duplicate it", async () => {
+  const { segment, candidate } = fixture();
+  let calls = 0;
+  const reviewer = async () => {
+    calls++;
+    return { episodes: [candidate] };
+  };
+  const result = await reviewConversationSegment(segment, { reviewer });
+  assert.equal(result.episodeIds.length, 1);
+  assert.equal(reviewCount(), 1);
+  deleteEpisode(result.episodeIds[0]);
+  assert.equal(
+    (await reviewConversationSegment(segment, { reviewer })).alreadyReviewed,
+    true
+  );
+  assert.equal(calls, 1);
+  assert.deepEqual(listEpisodes(), []);
+  await assert.rejects(
+    reviewConversationSegment(
+      { ...segment, firstMessageId: segment.lastMessageId },
+      { reviewer }
+    ),
+    /overlap/
+  );
+});
+test("a no-save decision is checkpointed", async () => {
+  const { segment } = fixture();
+  assert.deepEqual(
+    await reviewConversationSegment(segment, {
+      reviewer: async () => ({ episodes: [] })
+    }),
+    { alreadyReviewed: false, episodeIds: [] }
+  );
+  assert.equal(reviewCount(), 1);
+  assert.deepEqual(listEpisodes(), []);
+});
+test("bad candidates roll back the entire batch and leave the range retryable", async () => {
+  const { segment, candidate } = fixture();
+  const bad = {
+    ...candidate,
+    sourceMessageIds: [segment.lastMessageId],
+    observedReactions: [],
+    novaReportedReaction: {
+      messageId: segment.lastMessageId,
+      quote: "Invented reaction"
+    }
+  };
+  const first = {
+    ...candidate,
+    sourceMessageIds: [segment.firstMessageId],
+    novaReportedReaction: null
+  };
+  await assert.rejects(
+    reviewConversationSegment(segment, {
+      reviewer: async () => ({ episodes: [first, bad] })
+    }),
+    /quote/
+  );
+  assert.deepEqual(listEpisodes(), []);
+  assert.equal(reviewCount(), 0);
+  await reviewConversationSegment(segment, {
+    reviewer: async () => ({ episodes: [candidate] })
+  });
+  assert.equal(listEpisodes().length, 1);
+});
+test("new activity, edited sources, and cancellation prevent stale writes", async () => {
+  for (const mutate of [
+    () => addMessage(1, { role: "user", content: "More context" }),
+    () =>
+      db
+        .prepare(
+          "UPDATE messages SET content='Changed' WHERE conversation_id=1"
+        )
+        .run()
+  ]) {
+    db.exec("DELETE FROM messages; DELETE FROM conversations;");
+    const { segment, candidate } = fixture();
+    await assert.rejects(
+      reviewConversationSegment(segment, {
+        reviewer: async () => {
+          mutate();
+          return { episodes: [candidate] };
+        }
+      }),
+      /changed/
+    );
+    assert.deepEqual(listEpisodes(), []);
+    assert.equal(reviewCount(), 0);
+  }
+  const { segment } = fixture();
+  const controller = new AbortController();
+  await assert.rejects(
+    reviewConversationSegment(segment, {
+      signal: controller.signal,
+      reviewer: async () => {
+        controller.abort();
+        return { episodes: [] };
+      }
+    })
+  );
+  assert.equal(reviewCount(), 0);
+});
+test("malformed output, wrong attribution, and model failures leave persistence unchanged", async () => {
+  const { segment, candidate } = fixture();
+  for (const output of [
+    null,
+    {},
+    {
+      episodes: [
+        {
+          ...candidate,
+          observedReactions: [
+            {
+              participant: "user",
+              messageId: segment.lastMessageId,
+              quote: "I'm happy for you!"
+            }
+          ]
+        }
+      ]
+    },
+    { episodes: [{ ...candidate, sourceMessageIds: [999999] }] }
+  ]) {
+    await assert.rejects(
+      reviewConversationSegment(segment, { reviewer: async () => output })
+    );
+    assert.deepEqual(listEpisodes(), []);
+    assert.equal(reviewCount(), 0);
+  }
+  await assert.rejects(
+    reviewConversationSegment(segment, {
+      reviewer: async () => {
+        throw new Error("Model offline");
+      }
+    }),
+    /offline/
+  );
+  assert.equal(reviewCount(), 0);
+});
+
+test("durable checkpoints survive restart and concurrent reviews commit once", async () => {
+  const { segment, candidate } = fixture();
+  const reviewer = async () => ({ episodes: [candidate] });
+  const results = await Promise.all([
+    reviewConversationSegment(segment, { reviewer }),
+    reviewConversationSegment(segment, { reviewer })
+  ]);
+  assert.equal(
+    results.filter(({ alreadyReviewed }) => !alreadyReviewed).length,
+    1
+  );
+  assert.equal(listEpisodes().length, 1);
+  const program = `const {reviewConversationSegment}=await import('./src/novaCore/memory/reviewConversationSegment.ts');
+    const result=await reviewConversationSegment(${JSON.stringify(segment)}, {reviewer:async()=>{throw new Error('Must not call model')}});
+    console.log(JSON.stringify(result)); const {db}=await import('./src/database/database.ts'); db.close();`;
+  const output = execFileSync(
+    process.execPath,
+    ["--import", "tsx", "--input-type=module", "-e", program],
+    { env: process.env, encoding: "utf8" }
+  );
+  assert.deepEqual(JSON.parse(output), {
+    alreadyReviewed: true,
+    episodeIds: []
+  });
+});
