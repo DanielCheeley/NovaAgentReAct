@@ -17,6 +17,14 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS episodes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_at TEXT NOT NULL,
+    recorded_at TEXT NOT NULL,
+    conversation_id INTEGER NOT NULL,
+    account TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     conversation_id INTEGER NOT NULL,

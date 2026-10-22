@@ -42,6 +42,16 @@ Functions: `saveEpisode`, `getEpisode`, `listEpisodes`, `deleteEpisode`.
 
 Done when: a meaningful interaction persists with its source and both representations; it can be retrieved after restart; saving it creates no preference automatically.
 
+### Step 2 implementation checkpoint (October 22, 2026)
+
+Added separate `episodes` storage and backend `saveEpisode`, `getEpisode`, `listEpisodes`, and `deleteEpisode` functions in `episodeStore.ts`. Each episode holds source conversation/message IDs, event time from the earliest source message, recorded time, structured event description, participants, quoted observations, nullable Nova-reported reaction, nullable outcome, significance, and a separate first-person interpretation. Episode text supports up to 20,000 characters per field, independently of the fact limit.
+
+Saving validates that source messages still exist in the selected conversation. Reaction quotes must occur in referenced messages; Nova-reported reactions must quote an assistant message. These checks establish source existence and quoted text, not the truth of a developer-authored interpretation. No model review, preference writes, normal-chat retrieval, or automatic triggers are added in this step.
+
+Focused tests copy an actual exchange from this development conversation into a disposable database. They verify restart persistence, unknown reactions, longer accounts, rejected sources/quotes, deletion, and zero semantic writes. All 10 combined episode/semantic tests pass; the backend build and diff checks pass. Full suite: 53/55, with the same two HTTP streaming `fetch failed` failures recorded in step 1. No live model judgment is involved at this stage.
+
+Current deletion policy matches shared facts: deleting a conversation does not delete its saved episodes. Source IDs can therefore become unavailable; no hidden copy of the conversation is retained. Deleting an episode removes its stored accounts and quotes. Source exclusion, replay protection, and dependent belief cleanup remain later roadmap work. Automatic review must not assume missing sources remain inspectable.
+
 ## 3. Review one conversation segment into episodes
 
 Implement `reviewConversationSegment`: read an identified source range, produce zero or more episode candidates, validate their sources and structure, and save accepted episodes. Routine small talk can produce nothing. Use a development command to trigger the full operation first, without adding a separate approval/preview workflow.
