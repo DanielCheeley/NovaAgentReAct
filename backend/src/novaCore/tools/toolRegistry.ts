@@ -6,6 +6,12 @@ import { scheduleTask } from "./scheduleTask";
 import { getTasks } from "./getTasks";
 import { cancelTask } from "./cancelTask";
 import { rescheduleTask } from "./rescheduleTask";
+import {
+  updateMemory,
+  rememberMemory,
+  getMemories,
+  forgetMemory
+} from "../memory/longTermMemoryStore";
 import type { ToolContext, ToolDefinition } from "../../types/toolTypes";
 export type { ToolDefinition } from "../../types/toolTypes";
 export { toolDefinitions } from "./toolDefinitions";
@@ -30,6 +36,28 @@ function defineTool(
 }
 
 export const tools: Record<string, ToolDefinition> = {
+  rememberMemory: defineTool(async (args, context) => {
+    if (!context.memoryWritesAllowed)
+      return toolFailure("Only a user request can save a memory.");
+    return toolSuccess(rememberMemory(args.content));
+  }),
+  updateMemory: defineTool(
+    async (args, context) => {
+      if (!context.memoryWritesAllowed)
+        return toolFailure("Only a user request can correct a memory.");
+      return toolSuccess(updateMemory(args.memoryId, args.content));
+    },
+    ["getMemories"]
+  ),
+  getMemories: defineTool(async () => toolSuccess({ memories: getMemories() })),
+  forgetMemory: defineTool(
+    async (args, context) => {
+      if (!context.memoryWritesAllowed)
+        return toolFailure("Only a user request can forget a memory.");
+      return toolSuccess(forgetMemory(args.memoryId));
+    },
+    ["getMemories"]
+  ),
   getWeather: defineTool(async (args) => {
     const result = await getWeather({
       location: args.location as string,

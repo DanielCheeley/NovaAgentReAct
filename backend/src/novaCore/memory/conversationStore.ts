@@ -116,13 +116,40 @@ export function getConversation(conversationId: number): Conversation {
   return rowToConversation(row);
 }
 
-export function addMessage(conversationId: number, message: Message): void {
+export function conversationHasRecall(conversationId: number): boolean {
+  return Boolean(
+    db
+      .prepare(
+        `SELECT 1 FROM memory_informed_replies r
+    JOIN messages m ON m.id = r.message_id WHERE m.conversation_id = ? LIMIT 1`
+      )
+      .get(conversationId)
+  );
+}
+
+export function addMessage(
+  conversationId: number,
+  message: Message,
+  memoryInformed = false
+): void {
+  if (memoryInformed && message.role === "assistant") {
+    db.transaction(() => {
+      const id = insertMessage(conversationId, message);
+      db.prepare("INSERT INTO memory_informed_replies VALUES (?)").run(id);
+    })();
+  } else {
+    insertMessage(conversationId, message);
+  }
+}
+
+function insertMessage(conversationId: number, message: Message) {
   getConversation(conversationId);
 
   const now = new Date().toISOString();
 
-  db.prepare(
-    `
+  const result = db
+    .prepare(
+      `
     INSERT INTO messages (
       conversation_id,
       role,
@@ -142,15 +169,16 @@ export function addMessage(conversationId: number, message: Message): void {
       @toolCalls
     )
   `
-  ).run({
-    conversationId,
-    role: message.role,
-    content: message.content,
-    createdAt: now,
-    toolCallId: message.tool_call_id ?? null,
-    toolName: message.tool_name ?? null,
-    toolCalls: message.tool_calls ? JSON.stringify(message.tool_calls) : null
-  });
+    )
+    .run({
+      conversationId,
+      role: message.role,
+      content: message.content,
+      createdAt: now,
+      toolCallId: message.tool_call_id ?? null,
+      toolName: message.tool_name ?? null,
+      toolCalls: message.tool_calls ? JSON.stringify(message.tool_calls) : null
+    });
 
   db.prepare(
     `
@@ -159,6 +187,7 @@ export function addMessage(conversationId: number, message: Message): void {
     WHERE id = ?
   `
   ).run(now, conversationId);
+  return result.lastInsertRowid;
 }
 
 export function updateConversationTitle(
@@ -195,21 +224,36 @@ export function getConversations(): Conversation[] {
 }
 
 // Read without creating a conversation: deleted chats must stay deleted.
-export function getConversationTitleSeed(conversationId: number): string | undefined {
-  const row = db.prepare(`
+export function getConversationTitleSeed(
+  conversationId: number
+): string | undefined {
+  const row = db
+    .prepare(
+      `
     SELECT m.content FROM messages m
     JOIN conversations c ON c.id = m.conversation_id
     WHERE c.id = ? AND c.title = 'New Conversation' AND m.role = 'user'
     ORDER BY m.id ASC LIMIT 1
-  `).get(conversationId) as { content: string } | undefined;
+  `
+    )
+    .get(conversationId) as { content: string } | undefined;
   return row?.content;
 }
 
-export function updateUntitledConversation(conversationId: number, title: string): boolean {
-  return db.prepare(`
+export function updateUntitledConversation(
+  conversationId: number,
+  title: string
+): boolean {
+  return (
+    db
+      .prepare(
+        `
     UPDATE conversations SET title = ?
     WHERE id = ? AND title = 'New Conversation'
-  `).run(title, conversationId).changes === 1;
+  `
+      )
+      .run(title, conversationId).changes === 1
+  );
 }
 
 export function deleteConversation(conversationId: number): void {

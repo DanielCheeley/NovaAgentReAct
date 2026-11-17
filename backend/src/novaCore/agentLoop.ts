@@ -1,3 +1,4 @@
+import { requestedMemoryWrite } from "./memory/memoryIntent";
 import debug from "debug";
 import { generateResponse } from "./model";
 import { Message } from "../types/conversationType";
@@ -27,6 +28,7 @@ export async function runAgent(
   const MAX_LOOPS = 5;
   const generatedMessages: Message[] = [];
   const executedTools = new Set<string>();
+  const authorizedMemoryTool = requestedMemoryWrite(messages.at(-1));
   const actions = new ActionCoordinator(
     [reminderAdapter(conversationId)],
     messages,
@@ -56,7 +58,8 @@ export async function runAgent(
     const started = performance.now();
     const result = await executeTool(tool, args, {
       conversationId,
-      signal: options.signal
+      signal: options.signal,
+      memoryWritesAllowed: name === authorizedMemoryTool
     });
     options.onToolTiming?.({
       name,

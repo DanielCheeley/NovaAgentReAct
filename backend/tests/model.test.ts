@@ -23,7 +23,13 @@ test("chat model request preserves prompt, tools and generation settings", async
       { role: "system", content: NOVA_SYSTEM_PROMPT },
       { role: "user", content: "Hello" }
     ]);
-    assert.deepEqual(body.tools, toolDefinitions);
+    assert.deepEqual(
+      body.tools,
+      toolDefinitions.filter(
+        ({ function: { name } }) =>
+          !["rememberMemory", "updateMemory", "forgetMemory"].includes(name)
+      )
+    );
     assert.equal(body.stream, MODEL_CONFIG.stream);
     assert.equal(body.think, MODEL_CONFIG.think);
     assert.equal(body.options.temperature, MODEL_CONFIG.temperature);

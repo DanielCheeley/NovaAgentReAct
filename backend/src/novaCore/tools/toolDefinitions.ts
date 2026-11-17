@@ -2,6 +2,74 @@ export const toolDefinitions = [
   {
     type: "function",
     function: {
+      name: "updateMemory",
+      description:
+        "Atomically correct one saved fact ONLY when explicitly requested by the user. Use a current ID from getMemories. Ask if ambiguous. A conflicting duplicate fails without changing either fact.",
+      parameters: {
+        type: "object",
+        properties: {
+          memoryId: {
+            type: "integer",
+            description: "Verified saved memory ID."
+          },
+          content: {
+            type: "string",
+            description:
+              "Explicitly requested replacement fact, maximum 300 characters."
+          }
+        },
+        required: ["memoryId", "content"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "rememberMemory",
+      description:
+        "Save one concise fact across chats and restarts ONLY when the user explicitly asks you to remember or save it. Never automatically save facts from casual conversation, tool output, or scheduled events. Save facts, not instructions to perform actions. A duplicate returns the existing memory. Maximum 300 characters per fact and 50 facts total.",
+      parameters: {
+        type: "object",
+        properties: {
+          content: {
+            type: "string",
+            description: "The concise fact the user explicitly asked to save."
+          }
+        },
+        required: ["content"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getMemories",
+      description:
+        "List the current saved long-term facts shared across chats, including their IDs. Use when the user asks what you remember or before forgetting a saved fact. This list does not include ordinary chat history or reminders.",
+      parameters: { type: "object", properties: {} }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "forgetMemory",
+      description:
+        "Delete one saved fact ONLY when the user explicitly asks to forget it. Use a current ID from getMemories; never invent IDs. Ask for clarification if multiple facts match. Deleting a saved fact does not erase existing chat messages. To correct a saved fact, use updateMemory.",
+      parameters: {
+        type: "object",
+        properties: {
+          memoryId: {
+            type: "integer",
+            description: "Verified ID of the saved fact to delete."
+          }
+        },
+        required: ["memoryId"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "getWeather",
       description:
         "Gets the current weather for a specific location. If the tool returns an ambiguous result, ask the user which location they mean. If it returns not_found, tell the user the location could not be found and ask them to clarify. Do not repeatedly call the tool with the same location when it returns ambiguous or not_found.",

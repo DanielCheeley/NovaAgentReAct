@@ -1,3 +1,4 @@
+import { startIdleMemoryReview } from "./novaCore/memory/idleMemoryReview";
 import express from "express";
 import cors from "cors";
 import debug from "debug";
@@ -37,6 +38,7 @@ const server = createServer(app);
 //set up services
 startWebSocketServer(server);
 startScheduler();
+startIdleMemoryReview();
 
 server.listen(PORT, () => {
   logger(`Nova backend running on http://localhost:${PORT}`);
