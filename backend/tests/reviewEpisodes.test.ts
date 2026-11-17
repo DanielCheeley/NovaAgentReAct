@@ -222,3 +222,129 @@ test("durable checkpoints survive restart and concurrent reviews commit once", a
     episodeIds: []
   });
 });
+
+test("idle review skips history, aborts on chat, and resumes pending work from disk state", async () => {
+  const {
+    initializeIdleReview,
+    beginChatActivity,
+    runIdleReview,
+    pendingSegment
+  } = await import("../src/novaCore/memory/idleMemoryReview");
+  fixture();
+  initializeIdleReview();
+  assert.equal(pendingSegment(), undefined);
+  addMessage(1, { role: "user", content: "A new turn" });
+  addMessage(1, { role: "assistant", content: "New response" });
+  const pending = pendingSegment();
+  assert.ok(pending);
+  const finish = beginChatActivity();
+  await runIdleReview(0, async () => {
+    assert.fail("reviewed active chat");
+  });
+  finish();
+  const interrupted = await runIdleReview(0, (segment, options) =>
+    reviewConversationSegment(segment, {
+      ...options,
+      reviewer: async (_sources, signal) => {
+        const end = beginChatActivity();
+        assert.equal(signal.aborted, true);
+        end();
+        return { episodes: [] };
+      }
+    })
+  );
+  assert.equal(interrupted, undefined);
+  assert.equal(reviewCount(), 0);
+  initializeIdleReview();
+  assert.deepEqual(pendingSegment(), pending);
+  await runIdleReview(0, (segment, options) =>
+    reviewConversationSegment(segment, {
+      ...options,
+      reviewer: async () => ({ episodes: [] })
+    })
+  );
+  assert.equal(reviewCount(), 1);
+  assert.equal(pendingSegment(), undefined);
+});
+
+test("forgotten episode sources cannot be saved or reviewed again", async () => {
+  const { saveEpisode } = await import("../src/novaCore/memory/episodeStore");
+  const { segment, candidate } = fixture();
+  const input = {
+    ...candidate,
+    significance: "medium" as const,
+    sourceConversationId: segment.conversationId
+  };
+  assert.equal(deleteEpisode(saveEpisode(input).id), true);
+  assert.throws(() => saveEpisode(input), /forgotten/);
+  await assert.rejects(
+    reviewConversationSegment(segment, {
+      reviewer: async () => {
+        assert.fail("forgotten messages reached the reviewer");
+      }
+    }),
+    /forgotten/
+  );
+});
+
+test("Ollama paraphrases are omitted while exact reactions are saved", async () => {
+  const { segment, candidate } = fixture();
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () =>
+      Response.json({
+        message: {
+          content: JSON.stringify({
+            episodes: [
+              {
+                ...candidate,
+                novaReportedReaction: {
+                  messageId: segment.lastMessageId,
+                  quote: "I was pleased."
+                }
+              }
+            ]
+          })
+        }
+      });
+    assert.equal(
+      (await reviewConversationSegment(segment)).episodeIds.length,
+      1
+    );
+    assert.equal(listEpisodes()[0].novaReportedReaction, null);
+    assert.deepEqual(
+      listEpisodes()[0].observedReactions,
+      candidate.observedReactions
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("recall-only turns are checkpointed without asking the reviewer", async () => {
+  const { segment } = fixture();
+  db.prepare("UPDATE messages SET content = ? WHERE id = ?").run(
+    "What do you remember about our conversations about fossils?",
+    segment.firstMessageId
+  );
+  const result = await reviewConversationSegment(segment, {
+    reviewer: async () => assert.fail("Recall reached the reviewer")
+  });
+  assert.deepEqual(result.episodeIds, []);
+  assert.equal(reviewCount(), 1);
+});
+
+test("persisted memory provenance is provided to the reviewer for non-trigger phrasing", async () => {
+  const { segment } = fixture();
+  db.prepare("INSERT INTO memory_informed_replies VALUES (?)").run(
+    segment.lastMessageId
+  );
+  await reviewConversationSegment(segment, {
+    reviewer: async (sources) => {
+      assert.equal(sources[0].memoryInformed, false);
+      assert.equal(sources.at(-1)?.memoryInformed, true);
+      return { episodes: [] };
+    }
+  });
+  assert.equal(reviewCount(), 1);
+});

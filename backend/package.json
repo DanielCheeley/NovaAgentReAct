@@ -10,6 +10,7 @@
     "build": "tsc",
     "benchmark:model": "tsx scripts/benchmarkModel.ts",
     "smoke:episodes": "tsx --env-file=.env scripts/smokeEpisodes.ts",
+    "learn:preference": "tsx --env-file=.env scripts/learnPreference.ts",
     "review:episodes": "tsx --env-file=.env scripts/reviewEpisodes.ts",
     "smoke:memory": "tsx scripts/smokeMemory.ts"
   },

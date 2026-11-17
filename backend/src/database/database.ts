@@ -34,6 +34,24 @@ db.exec(`
     PRIMARY KEY (conversation_id, first_message_id, last_message_id)
   );
 
+  CREATE TABLE IF NOT EXISTS forgotten_episode_sources (message_id INTEGER PRIMARY KEY);
+  CREATE TABLE IF NOT EXISTS forgotten_preference_topics (digest TEXT PRIMARY KEY);
+  CREATE TABLE IF NOT EXISTS idle_review_start (id INTEGER PRIMARY KEY CHECK(id = 1), message_id INTEGER NOT NULL);
+
+  CREATE TABLE IF NOT EXISTS preference_review_progress (
+    id INTEGER PRIMARY KEY CHECK(id = 1), episode_id INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS preference_conflicts (
+    topic TEXT PRIMARY KEY REFERENCES learned_preferences(topic) ON DELETE CASCADE ON UPDATE CASCADE,
+    episode_id INTEGER NOT NULL REFERENCES episodes(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS learned_preferences (
+    topic TEXT PRIMARY KEY,
+    evidence_ids TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     conversation_id INTEGER NOT NULL,
@@ -59,6 +77,10 @@ db.exec(`
     tool_name TEXT,
     tool_calls TEXT,
     FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS memory_informed_replies (
+    message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE
   );
 `);
 

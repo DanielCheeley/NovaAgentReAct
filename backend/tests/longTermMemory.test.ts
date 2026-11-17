@@ -293,3 +293,42 @@ test("legacy schema migrates without losing facts and survives a second startup"
     reopened.close();
   }
 });
+
+test("ordinary chat cannot execute an unsolicited fact save", async () => {
+  let step = 0;
+  const result = await runAgent(
+    [
+      {
+        role: "user",
+        content:
+          "I learned how minerals preserve shells. What do you find interesting?"
+      }
+    ],
+    1,
+    async () =>
+      step++ === 0
+        ? {
+            content: "",
+            tool_calls: [
+              {
+                id: "unsolicited",
+                type: "function",
+                function: {
+                  name: "rememberMemory",
+                  arguments: { content: "User learned about shells." }
+                }
+              }
+            ]
+          }
+        : { content: "Interesting." }
+  );
+  assert.equal(getMemories().length, 0);
+  assert.ok(
+    result.messages.some(
+      (message) =>
+        message.role === "tool" &&
+        message.tool_name === "rememberMemory" &&
+        !JSON.parse(message.content).success
+    )
+  );
+});

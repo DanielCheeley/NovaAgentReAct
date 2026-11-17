@@ -86,6 +86,12 @@ Done when: a fresh conversation can recall an episode and a supported preference
 
 This is the first useful milestone: conversation -> meaningful episode -> evidence-backed belief -> fresh-chat recall. Automated activity selection and small-talk topic selection are outside this roadmap.
 
+### Steps 4–5 first checkpoint
+
+Manually propose one Nova interest with `npm run learn:preference --workspace=backend -- "topic" <episodeId> <episodeId>`. Supply two episodes with non-overlapping messages. The local model evaluates Nova's actual dialogue and may reject the proposal. An accepted interest is tentative and links both episodes. Ordinary chat includes up to three matching interests and their episode summaries when the current user message names the stored topic. This first pass uses exact topic matching; it does not yet recall standalone episodes or recognize related terms.
+
+Correction, forgetting policy, evidence refinement, and idle automation are deferred.
+
 ## 6. Let new experience revise understanding
 
 Add `reconsiderBelief` for supporting or conflicting evidence. A new discovery may narrow an interest, weaken it, or change it; one unpleasant detail need not reverse the entire preference. For user facts, distinguish temporary context from lasting change. Keep episodes' original accounts and append later interpretations rather than rewriting the original event.
@@ -103,6 +109,24 @@ The memory reviewer and Nova's evaluation are separate roles that initially use 
 Persist accepted changes and the source checkpoint atomically. Failed or interrupted work must remain eligible for a bounded retry; unchanged sources must not be repeatedly reprocessed. Allow a successful review to save nothing. On restart, resume pending work without duplicating episodes or evidence.
 
 Done when: chat -> idle -> review -> Nova's evaluation -> validated persistence -> fresh-chat recall works end to end, including no-save decisions, correction, cancellation, retry, restart, and no duplicate processing. This automates memory processing only.
+
+### Revision and idle-review checkpoint
+
+Use `npm run learn:preference --workspace=backend -- revise "old topic" "narrower topic" <episodeId> <newEpisodeId>` to ask Nova to evaluate a replacement. The replacement stays tentative. Use `npm run learn:preference --workspace=backend -- forget "topic"` to remove a learned preference and block that normalized topic from being relearned through this command. Renamed topics are also blocked from replay. This is exact-topic exclusion, not synonym detection. Explicit episode deletion excludes its source message IDs from episode review and removes learned preferences relying on it. The original chat is retained.
+
+Restart the backend to enable idle episode review. It defaults to 60 seconds; set `MEMORY_REVIEW_IDLE_MS=0` to disable it. First activation starts at the current end of chat history; later restarts retain that starting point and skip completed ranges. A new turn cancels running review. Failed work stays pending with a retry delay. Idle review initially saved only episodes; the automatic preference checkpoint below extends it. Oversized individual messages are omitted from idle review.
+
+### Automatic learning and recall checkpoint
+
+After episode review, the idle worker checks new episodes for possible Nova interests. The proposal must cite the new episode and one earlier episode from a different conversation. A separate model call checks the original dialogue before saving or refreshing that topic. Automatic review cannot rename another interest; explicit developer revisions still can. SQLite tracks progress independently of episode review, so a restart does not strand an episode between the two steps. Existing episodes are not bulk reprocessed on first activation but can serve as earlier evidence. New chat activity cancels in-flight work. Forgetting stays explicit.
+
+Ordinary chat now retrieves up to three standalone episode summaries using shared keywords from the latest user message. Search covers the most recent 100 episodes. This does not support synonyms, automatic promotion, or automatic weakening of a belief.
+
+### Recall provenance and preference aging
+
+Ordinary chat now records whether a reply had episode or preference context (or a memory listing) available. The marker follows later replies in that conversation because prior replies remain in context. Review sees the marker and requires a concrete new disclosure and a fresh reaction rather than repeated recall; judging novelty still uses the model. This does not backfill older replies.
+
+A tentative preference is withheld from recall after 90 days without supporting evidence, measured from the newest supporting event, or when idle review finds a newer, explicitly opposing Nova reaction with a verified source quote. The evidence remains stored. Recalling an interest does not refresh it; reactivation needs newly evaluated positive evidence. No new recall trigger phrases or general retrieval changes are included.
 
 ## 8. Add tentative review and forgetting
 
