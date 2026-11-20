@@ -1,9 +1,74 @@
-:root { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; color: #eeedf2; background: #111114; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; color-scheme: dark; }
-* { box-sizing: border-box; }
-body { margin: 0; }
-button, textarea { font: inherit; }
-button { cursor: pointer; }
-button:disabled { cursor: default; }
-button, a, textarea, summary { -webkit-tap-highlight-color: transparent; }
-:focus-visible { outline: 2px solid #c7a0ef; outline-offset: 4px; }
-::selection { background: #75499c; color: white; }
+@import "@fontsource-variable/inter";
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --background: #121119;
+  --foreground: #f5f1fc;
+  --sidebar: #181720;
+  --card: #1e1c29;
+  --card-foreground: #f5f1fc;
+  --primary: #c6aaff;
+  --primary-foreground: #211435;
+  --secondary: #282438;
+  --secondary-foreground: #efe5ff;
+  --muted: #23212e;
+  --muted-foreground: #aaa4ba;
+  --accent: #2a2539;
+  --accent-foreground: #f4ebff;
+  --destructive: #fda4af;
+  --border: #343043;
+  --input: #433b55;
+  --ring: #b99ae9;
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar: var(--sidebar);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+@layer base {
+  body {
+    @apply bg-background font-sans text-foreground antialiased selection:bg-primary selection:text-primary-foreground;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .message-markdown {
+    @apply space-y-3 wrap-anywhere;
+
+    & :is(h1, h2, h3, h4, h5, h6) { @apply font-semibold tracking-tight; }
+    & h1 { @apply text-2xl; }
+    & h2 { @apply text-xl; }
+    & h3 { @apply text-lg; }
+    & ul { @apply list-disc space-y-1 pl-6; }
+    & ol { @apply list-decimal space-y-1 pl-6; }
+    & a { @apply text-primary underline underline-offset-3; }
+    & blockquote { @apply border-l-2 border-primary/60 pl-4 text-muted-foreground; }
+    & hr { @apply border-border; }
+    & :not(pre) > code { @apply rounded bg-muted px-1 py-0.5 text-[0.9em] text-primary; }
+    & pre { @apply overflow-x-auto rounded-xl border border-border bg-background p-3 text-xs; }
+    & img { @apply max-w-full rounded-lg; }
+  }
+}
