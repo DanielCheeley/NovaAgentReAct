@@ -93,6 +93,35 @@ test("a no-save decision is checkpointed", async () => {
   assert.equal(reviewCount(), 1);
   assert.deepEqual(listEpisodes(), []);
 });
+
+test("a Discord chat-only turn can recall a reviewed episode without tools", async (t) => {
+  const { handleMessage } = await import("../src/novaCore/agent");
+  const { segment, candidate } = fixture();
+  await reviewConversationSegment(segment, {
+    reviewer: async () => ({ episodes: [candidate] })
+  });
+
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    const body = JSON.parse(options!.body as string);
+    assert.equal(body.tools, undefined);
+    assert.ok(
+      body.messages.some(
+        (message: { role: string; content: string }) =>
+          message.role === "system" && message.content.includes(candidate.happened)
+      )
+    );
+    return Response.json({ message: { content: "You finished your first painting." } });
+  });
+  const reply = await handleMessage(2, "alex: Nova, how did my painting go?", {
+    chatOnly: true,
+    recallChannelMemory: true
+  });
+  assert.equal(reply.response, "You finished your first painting.");
+  assert.ok(
+    db.prepare(`SELECT 1 FROM memory_informed_replies r
+      JOIN messages m ON m.id = r.message_id WHERE m.conversation_id = 2`).get()
+  );
+});
 test("bad candidates roll back the entire batch and leave the range retryable", async () => {
   const { segment, candidate } = fixture();
   const bad = {

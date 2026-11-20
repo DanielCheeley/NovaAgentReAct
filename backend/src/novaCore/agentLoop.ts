@@ -11,6 +11,8 @@ import type { GenerationOptions, ToolTiming } from "../types/generationType";
 import type { ToolDefinition } from "../types/toolTypes";
 
 export type AgentOptions = GenerationOptions & {
+  chatOnly?: boolean;
+  recallChannelMemory?: boolean;
   onRecord?: (message: Message) => void;
   onLoopComplete?: (content: string) => void;
   onToolTiming?: (timing: ToolTiming) => void;
@@ -29,11 +31,6 @@ export async function runAgent(
   const generatedMessages: Message[] = [];
   const executedTools = new Set<string>();
   const authorizedMemoryTool = requestedMemoryWrite(messages.at(-1));
-  const actions = new ActionCoordinator(
-    [reminderAdapter(conversationId)],
-    messages,
-    (name, args) => executeTimed(name, tools[name], args)
-  );
 
   function finish(content: string) {
     options.signal?.throwIfAborted();
@@ -70,6 +67,17 @@ export async function runAgent(
   }
 
   try {
+    if (options.chatOnly) {
+      options.signal?.throwIfAborted();
+      const response = await respond(messages, options);
+      return finish(response.content?.trim() || "I couldn't generate a reply.");
+    }
+
+    const actions = new ActionCoordinator(
+      [reminderAdapter(conversationId)],
+      messages,
+      (name, args) => executeTimed(name, tools[name], args)
+    );
     // Supply fresh clock data even if the model forgets to request it.
     const clock = await executeTimed(
       "getDateAndTime",

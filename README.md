@@ -11,11 +11,23 @@ Run these from the repository root:
 | `npm run dev` | Start both development servers |
 | `npm run dev:frontend` | Start Vite on its default port, 5173 |
 | `npm run dev:backend` | Start the backend development watcher on port 3000 |
+| `npm run discord` | Run the private Discord prototype |
 | `npm run build` | Build both workspaces |
 | `npm test` | Run agent, model, chat-state and task-time regression tests |
 | `npm run lint:frontend` | Run the frontend ESLint checks |
 
 The existing workspace-specific build and backend start commands remain available. Backend development uses `backend/.env`; model settings are in `novaConfig.ts`. The frontend HTTP and WebSocket addresses share `BACKEND_URL` in `frontend/src/communication/api.ts`.
+
+## Discord prototype
+
+1. Install the Discord bot in your test server with the `bot` scope. In the test channel, give it **View Channel**, **Send Messages**, and **Read Message History** so it can reply to the original message. Use a regular text channel for this prototype.
+2. In the Discord Developer Portal, open **Bot** and enable **Message Content Intent** under **Privileged Gateway Intents** so Nova can see her name in ordinary messages.
+3. Set `DISCORD_BOT_TOKEN` and `DISCORD_CHANNEL_ID` in your existing `backend/.env`. For a separate config, copy `backend/.env.discord.example` to `backend/.env.discord` and fill it in there. Values in `.env.discord` override those in `.env`. Copy the test channel ID using Discord's Developer Mode.
+4. Run `npm install` from the repository root, start Ollama with Nova's configured model available, then run `npm run discord`. Once the bot logs that it connected, send `hey Nova` in the test channel.
+
+The bot replies when anyone in the configured channel says Nova as a whole word, mentions her, or uses Discord's **Reply** on one of her messages with or without a ping. It ignores bots and webhooks. Run `npm run discord` in a separate terminal alongside `npm run dev` to use Discord and the web interface at the same time.
+
+Discord history and automatically saved episodes persist in `backend/data/nova-discord-channel-<channel-id>.db`. Nova reviews new exchanges after one idle minute by default and can recall relevant episodes in later channel replies. Older exchanges remain in the chat history, and the first review starts from the point this feature is enabled. `MEMORY_REVIEW_IDLE_MS` controls the delay and `0` stops new background reviews. The web app uses its own database. Reminders and manual memory tools are disabled in Discord.
 
 ## Long-term memory
 

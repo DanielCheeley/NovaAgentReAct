@@ -34,28 +34,42 @@ async function requestModel(
 
 export function generateResponse(
   messages: Message[],
-  options: GenerationOptions & { onRecallContext?: () => void } = {}
+  options: GenerationOptions & {
+    chatOnly?: boolean;
+    recallChannelMemory?: boolean;
+    onRecallContext?: () => void;
+  } = {}
 ): Promise<ModelResponse> {
   const query = messages.findLast((m) => m.role === "user")?.content ?? "";
-  const recalled = [preferenceContext(query), episodeContext(query)].filter(
-    Boolean
-  );
+  const recalled = options.chatOnly && !options.recallChannelMemory
+    ? []
+    : [preferenceContext(query), episodeContext(query)].filter(Boolean);
   if (
     recalled.length ||
     messages.some((m) => m.role === "tool" && m.tool_name === "getMemories")
   )
     options.onRecallContext?.();
-  const savedFacts = [memoryContext(), ...recalled].filter(Boolean).join("\n");
+  const memory = [options.chatOnly ? "" : memoryContext(), ...recalled]
+    .filter(Boolean)
+    .join("\n");
   return requestModel(
     {
       messages: [
         { role: "system", content: NOVA_SYSTEM_PROMPT },
+        ...(options.chatOnly
+          ? [{
+              role: "system" as const,
+              content: options.recallChannelMemory
+                ? "This is a shared Discord channel. Use the conversation history and relevant channel memories supplied to you. Keep claims attributed to the speaker who made them. You cannot manually save, edit, or delete memories, set reminders, or use tools here."
+                : "This is a Discord chat. You can use the conversation history. Long-term memory, reminders, and other tools are unavailable."
+            }]
+          : []),
         ...messages,
-        ...(savedFacts
-          ? [{ role: "system" as const, content: savedFacts }]
+        ...(memory
+          ? [{ role: "system" as const, content: memory }]
           : [])
       ],
-      tools: toolDefinitions.filter(
+      tools: options.chatOnly ? undefined : toolDefinitions.filter(
         ({ function: { name } }) =>
           !["rememberMemory", "updateMemory", "forgetMemory"].includes(name) ||
           name ===

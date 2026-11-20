@@ -19,6 +19,7 @@ const {
 } = await import("../src/novaCore/memory/longTermMemoryStore");
 const { tools } = await import("../src/novaCore/tools/toolRegistry");
 const { runAgent } = await import("../src/novaCore/agentLoop");
+const { handleMessage } = await import("../src/novaCore/agent");
 const { generateResponse } = await import("../src/novaCore/model");
 const { addMessage, deleteConversation } =
   await import("../src/novaCore/memory/conversationStore");
@@ -53,6 +54,32 @@ test("facts persist on disk independently of conversations and duplicate saves",
     reopened.close();
   }
   assert.equal(getMemories().length, 1);
+});
+
+test("chat-only turns omit saved facts and ignore model tool calls", async () => {
+  const saved = rememberMemory("A private fact for web chat.");
+  const prompt = "Remember that I like astronomy.";
+  addMessage(1, { role: "user", content: "We were talking about stars." });
+
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options!.body as string);
+    assert.equal(body.tools, undefined);
+    assert.ok(!JSON.stringify(body.messages).includes(saved.memory.content));
+    assert.deepEqual(body.messages.slice(-2), [
+      { role: "user", content: "We were talking about stars." },
+      { role: "user", content: prompt }
+    ]);
+    return Response.json({
+      message: {
+        content: "Astronomy is a good topic for this chat.",
+        tool_calls: [{ function: { name: "rememberMemory", arguments: { content: prompt } } }]
+      }
+    });
+  };
+
+  const result = await handleMessage(1, prompt, { chatOnly: true });
+  assert.equal(result.response, "Astronomy is a good topic for this chat.");
+  assert.deepEqual(getMemories(), [saved.memory]);
 });
 
 test("forget deletes only the chosen saved fact and leaves chat history intact", () => {

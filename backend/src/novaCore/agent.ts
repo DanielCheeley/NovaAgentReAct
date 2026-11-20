@@ -38,13 +38,17 @@ export async function handleMessage(
         const messages = [...updatedConversation.messages];
 
         let partial = "";
-        let memoryInformed = conversationHasRecall(conversationId);
+        let memoryInformed =
+          (!options.chatOnly || options.recallChannelMemory === true) &&
+          conversationHasRecall(conversationId);
         const result = await runAgent(
           messages,
           conversationId,
           (input, modelOptions) =>
             generateResponse(input, {
               ...modelOptions,
+              chatOnly: options.chatOnly,
+              recallChannelMemory: options.recallChannelMemory,
               onRecallContext: () => {
                 memoryInformed = true;
               }
