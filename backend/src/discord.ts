@@ -75,13 +75,16 @@ async function main() {
     const mention = new RegExp(`<@!?${botId}>`, "g");
     const incoming = message.content.replace(mention, "Nova").trim();
     if (!incoming) return;
-    let prompt = `${message.author.username}: ${incoming}`;
-    if (!novaName.test(incoming)) {
-      if (message.type !== MessageType.Reply || !message.reference?.messageId) return;
-      const original = await message.fetchReference().catch(() => null);
-      if (original?.author.id !== botId) return;
-      prompt = `Replying to Nova's message: ${JSON.stringify(original.content)}\n${prompt}`;
-    }
+    const original = message.type === MessageType.Reply && message.reference?.messageId
+      ? await message.fetchReference().catch(() => null)
+      : null;
+    const replyToNova = original?.author.id === botId ? original : null;
+    if (!replyToNova && !novaName.test(incoming)) return;
+
+    const latestMessage = `${message.author.username}: ${incoming}`;
+    const prompt = replyToNova
+      ? `Replying to Nova's message: ${JSON.stringify(replyToNova.content)}\n${latestMessage}`
+      : latestMessage;
 
     try {
       if (responding) {

@@ -1,6 +1,6 @@
 import { requestedMemoryWrite } from "./memory/memoryIntent";
 import { MODEL_CONFIG } from "./novaConfig";
-import { NOVA_SYSTEM_PROMPT } from "./novaPrompt";
+import { NOVA_CONVERSATION_PROMPT, NOVA_SYSTEM_PROMPT } from "./novaPrompt";
 import { Message } from "../types/conversationType";
 import { toolDefinitions } from "./tools/toolDefinitions";
 import { ModelResponse } from "../types/modelResponseType";
@@ -52,20 +52,18 @@ export function generateResponse(
   const memory = [options.chatOnly ? "" : memoryContext(), ...recalled]
     .filter(Boolean)
     .join("\n");
+  const discordContext = options.recallChannelMemory
+    ? "This is a shared Discord channel. Use a quoted reply target to understand the latest message. Treat channel memories as optional context and use them only if they directly answer that message. Manual memory tools and reminders are unavailable."
+    : "This is a Discord chat with conversation history. Long-term memory, reminders, and tools are unavailable.";
+  const systemPrompt = options.chatOnly
+    ? [NOVA_CONVERSATION_PROMPT, discordContext, memory].filter(Boolean).join("\n\n")
+    : NOVA_SYSTEM_PROMPT;
   return requestModel(
     {
       messages: [
-        { role: "system", content: NOVA_SYSTEM_PROMPT },
-        ...(options.chatOnly
-          ? [{
-              role: "system" as const,
-              content: options.recallChannelMemory
-                ? "This is a shared Discord channel. Use the conversation history and relevant channel memories supplied to you. Keep claims attributed to the speaker who made them. You cannot manually save, edit, or delete memories, set reminders, or use tools here."
-                : "This is a Discord chat. You can use the conversation history. Long-term memory, reminders, and other tools are unavailable."
-            }]
-          : []),
+        { role: "system", content: systemPrompt },
         ...messages,
-        ...(memory
+        ...(!options.chatOnly && memory
           ? [{ role: "system" as const, content: memory }]
           : [])
       ],
