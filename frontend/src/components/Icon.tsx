@@ -1,6 +1,5 @@
-type IconProps = { name: "spark" | "plus" | "chat" | "trash" | "arrow" | "stop" | "menu" | "code" | "idea" | "write"; size?: number };
+type IconProps = { name: "plus" | "chat" | "trash" | "arrow" | "stop" | "menu" | "code" | "idea" | "write"; size?: number };
 const paths = {
-  spark: "m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4L12 3Z",
   plus: "M12 5v14M5 12h14",
   chat: "M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 3V6a2 2 0 0 1 2-2Z",
   trash: "M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7",

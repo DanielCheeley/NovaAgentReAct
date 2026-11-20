@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import Icon from "./Icon";
+import NovaMark from "./NovaMark";
 import type { Conversation } from "../types/chat";
 
 type SidebarProps = {
@@ -45,7 +46,7 @@ function Sidebar({
     >
       <div className="mb-7 flex items-center gap-3 px-2">
         <span className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-primary text-primary-foreground">
-          <Icon name="spark" size={23} />
+          <NovaMark size={23} />
         </span>
         <div>
           <p className="text-lg leading-tight font-semibold tracking-tight">Nova</p>

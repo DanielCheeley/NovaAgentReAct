@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import Icon from "./Icon";
+import NovaMark from "./NovaMark";
 import type { RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -26,7 +27,7 @@ function MessageList({
         <div className="relative isolate mx-auto flex min-h-full max-w-3xl flex-col items-center justify-center py-7 text-center sm:py-12">
           <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-full bg-radial from-primary/10 to-transparent to-65%" />
           <div className="mb-6 grid size-16 place-items-center rounded-[1.35rem] border border-primary/25 bg-linear-to-br from-primary/25 to-primary/5 text-primary shadow-lg shadow-primary/10 ring-8 ring-primary/5 sm:mb-8">
-            <Icon name="spark" size={31} />
+            <NovaMark size={31} />
           </div>
           <h1 className="text-[clamp(1.75rem,5vw,3rem)] leading-[1.1] font-semibold tracking-[-0.055em] text-balance">What are we working on?</h1>
           <p className="mt-3 text-sm text-muted-foreground sm:mt-4 sm:text-base">Ask a question or choose a starting point.</p>
@@ -75,7 +76,7 @@ function MessageList({
                 <div className={cn("mb-2 flex items-center gap-2 text-xs font-semibold", message.role === "assistant" ? "text-primary" : "text-muted-foreground")}>
                   {message.role === "assistant" && (
                     <span className="grid size-7 place-items-center rounded-lg bg-primary/10">
-                      <Icon name="spark" size={15} />
+                      <NovaMark size={15} />
                     </span>
                   )}
                   {message.role === "user" ? "You" : "Nova"}

@@ -1,4 +1,5 @@
 import Icon from "./components/Icon";
+import NovaMark from "./components/NovaMark";
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "./hooks/useChat";
 import { useBackendHealth } from "./hooks/useBackendHealth";
@@ -97,7 +98,7 @@ function App() {
               <Icon name="menu" />
             </Button>
             <span className="hidden size-9 shrink-0 place-items-center rounded-xl border border-primary/20 bg-primary/10 text-primary md:grid">
-              <Icon name="spark" />
+              <NovaMark />
             </span>
             <div className="min-w-0">
               <p className="text-sm font-semibold">Nova</p>
