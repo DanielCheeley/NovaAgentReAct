@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { discordChannelId, discordDatabasePath, readEnvFile } from "./database/discordDatabase";
 import {
   Client,
   Events,
@@ -19,24 +20,29 @@ function requiredSetting(name: string, valid: (value: string) => boolean) {
 }
 
 async function main() {
+  const webDatabase = resolve(
+    process.env.NOVA_DATABASE_PATH ?? readEnvFile(".env").NOVA_DATABASE_PATH ?? "data/nova.db"
+  );
   // Existing environment variables win, then the Discord-specific file.
   for (const file of [".env.discord", ".env"]) {
     if (existsSync(file)) process.loadEnvFile(file);
   }
 
   const token = requiredSetting("DISCORD_BOT_TOKEN", Boolean);
-  const isDiscordId = (value: string) => /^\d{17,20}$/.test(value);
-  const channelId = requiredSetting("DISCORD_CHANNEL_ID", isDiscordId);
+  const channelId = discordChannelId();
+  const channelDatabase = discordDatabasePath(channelId);
+  if (!channelDatabase) {
+    throw new Error("Set a valid DISCORD_CHANNEL_ID in backend/.env or backend/.env.discord.");
+  }
 
   // Set the prototype database before Nova's modules open SQLite.
   const dataDirectory = resolve("data");
   mkdirSync(dataDirectory, { recursive: true });
-  process.env.NOVA_DATABASE_PATH = resolve(
-    dataDirectory,
-    `nova-discord-channel-${channelId}.db`
-  );
+  process.env.NOVA_DATABASE_PATH = channelDatabase;
   const { handleMessage } = await import("./novaCore/agent");
   const { startIdleMemoryReview } = await import("./novaCore/memory/idleMemoryReview");
+  const { configureMemorySources } = await import("./novaCore/memory/memorySources");
+  configureMemorySources("Discord", webDatabase);
 
   const client = new Client({
     intents: [
@@ -96,9 +102,22 @@ async function main() {
       try {
         let content: string;
         try {
+          const recentMessages = await message.channel.messages
+            .fetch({ before: message.id, limit: 12, cache: false })
+            .catch(() => null);
+          const recentChannelContext = recentMessages
+            ? [...recentMessages.values()]
+                .reverse()
+                .filter((entry) => entry.content.trim() && entry.id !== replyToNova?.id)
+                .map((entry) => ({
+                  speaker: entry.author.id === botId ? "Nova" : entry.author.username,
+                  text: entry.content.replace(mention, "Nova").trim().slice(0, 500)
+                }))
+            : [];
           const result = await handleMessage(conversationId, prompt, {
             chatOnly: true,
             recallChannelMemory: true,
+            recentChannelContext,
             signal: AbortSignal.timeout(120_000)
           });
           content = result.cancelled

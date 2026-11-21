@@ -7,31 +7,31 @@ import { getEpisode } from "./episodeStore";
 
 type Evidence = { role: string; content: string; memoryInformed?: boolean };
 
-function evidence(ids: number[]) {
+function evidence(ids: number[], database = db) {
   const seen = new Set<number>();
   const conversations = new Set<number>();
   return ids.map((id) => {
-    const episode = getEpisode(id);
+    const episode = getEpisode(id, database);
     if (!episode) throw new Error("Episode no longer exists.");
     if (conversations.has(episode.sourceConversationId))
       throw new Error(
         "Preference evidence must come from separate conversations."
       );
     conversations.add(episode.sourceConversationId);
-    const recalledReply = db.prepare(
+    const recalledReply = database.prepare(
       "SELECT 1 FROM memory_informed_replies WHERE message_id = ?"
     );
     const messages = episode.sourceMessageIds.map((messageId) => {
       if (seen.has(messageId))
         throw new Error("Episodes must have distinct sources.");
       seen.add(messageId);
-      const row = db
+      const row = database
         .prepare(
           "SELECT role, content FROM messages WHERE id = ? AND conversation_id = ?"
         )
         .get(messageId, episode.sourceConversationId) as Evidence | undefined;
       if (!row) throw new Error("Episode source no longer exists.");
-      const turn = db
+      const turn = database
         .prepare(
           `SELECT content FROM messages WHERE conversation_id = ?
         AND id <= ? AND role = 'user' ORDER BY id DESC LIMIT 1`
@@ -206,26 +206,27 @@ export async function revisePreference(
 export function preferenceIsCurrent(
   topic: string,
   ids: number[],
-  now = Date.now()
+  now = Date.now(),
+  database = db
 ) {
   if (
-    db.prepare("SELECT 1 FROM preference_conflicts WHERE topic = ?").get(topic)
+    database.prepare("SELECT 1 FROM preference_conflicts WHERE topic = ?").get(topic)
   )
     return false;
   const newest = Math.max(
-    ...ids.map((id) => Date.parse(getEpisode(id)?.eventAt ?? ""))
+    ...ids.map((id) => Date.parse(getEpisode(id, database)?.eventAt ?? ""))
   );
   return Number.isFinite(newest) && now - newest < 90 * 24 * 60 * 60 * 1000;
 }
 
-export function preferenceContext(query: string): string | undefined {
+export function preferenceContext(query: string, database = db): string | undefined {
   const words = (value: string) =>
     value
       .toLowerCase()
       .match(/[a-z0-9]+/g)
       ?.join(" ") ?? "";
   const normalized = " " + words(query) + " ";
-  const rows = db
+  const rows = database
     .prepare(
       "SELECT topic,evidence_ids FROM learned_preferences ORDER BY rowid DESC"
     )
@@ -234,11 +235,10 @@ export function preferenceContext(query: string): string | undefined {
   for (const row of rows) {
     if (!normalized.includes(" " + words(row.topic) + " ")) continue;
     const ids = JSON.parse(row.evidence_ids) as number[];
-    if (!preferenceIsCurrent(row.topic, ids)) continue;
-    const episodes = ids.map(getEpisode);
-    if (episodes.some((episode) => !episode)) continue;
+    if (!preferenceIsCurrent(row.topic, ids, Date.now(), database)) continue;
+    let sources: Snapshot;
     try {
-      evidence(JSON.parse(row.evidence_ids) as number[]);
+      sources = evidence(ids, database);
     } catch {
       continue;
     }
@@ -246,9 +246,9 @@ export function preferenceContext(query: string): string | undefined {
       subject: "nova",
       status: "tentative",
       topic: row.topic,
-      episodes: episodes.map((episode) => ({
-        id: episode!.id,
-        happened: episode!.happened.slice(0, 500)
+      episodes: sources.map(({ episode }) => ({
+        id: episode.id,
+        happened: episode.happened.slice(0, 500)
       }))
     });
     if (matches.length === 3) break;

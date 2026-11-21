@@ -122,6 +122,47 @@ test("a Discord chat-only turn can recall a reviewed episode without tools", asy
       JOIN messages m ON m.id = r.message_id WHERE m.conversation_id = 2`).get()
   );
 });
+
+test("web and Discord prompts can recall the other database with its source label", async (t) => {
+  const { generateResponse } = await import("../src/novaCore/model");
+  const { configureMemorySources } = await import("../src/novaCore/memory/memorySources");
+  const { rememberMemory, forgetMemory } = await import("../src/novaCore/memory/longTermMemoryStore");
+  const { segment, candidate } = fixture();
+  const discordDatabase = path.join(directory, "discord.db");
+  const webDatabase = path.join(directory, "web.db");
+  const webFact = "The user takes coffee without sugar.";
+  const systemMessages: string[] = [];
+  t.after(() => configureMemorySources("Web app"));
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    const body = JSON.parse(options!.body as string);
+    systemMessages.push(body.messages
+      .filter((message: { role: string }) => message.role === "system")
+      .map((message: { content: string }) => message.content)
+      .join("\n"));
+    return Response.json({ message: { content: "Recalled." } });
+  });
+
+  const { episodeIds } = await reviewConversationSegment(segment, {
+    reviewer: async () => ({ episodes: [candidate] })
+  });
+  await db.backup(discordDatabase);
+  db.prepare("DELETE FROM episodes WHERE id = ?").run(episodeIds[0]);
+  const { memory } = rememberMemory(webFact);
+  t.after(() => db.prepare("DELETE FROM memories WHERE id = ?").run(memory.id));
+  await db.backup(webDatabase);
+
+  configureMemorySources("Web app", discordDatabase);
+  await generateResponse([{ role: "user", content: "How did the painting go?" }]);
+  assert.ok(systemMessages[0].split("Memory source: Discord\n")[1]?.includes(candidate.happened));
+
+  forgetMemory(memory.id);
+  configureMemorySources("Discord", webDatabase);
+  await generateResponse([{ role: "user", content: "How does the web user take coffee?" }], {
+    chatOnly: true,
+    recallChannelMemory: true
+  });
+  assert.ok(systemMessages[1].split("Memory source: Web app\n")[1]?.includes(webFact));
+});
 test("bad candidates roll back the entire batch and leave the range retryable", async () => {
   const { segment, candidate } = fixture();
   const bad = {

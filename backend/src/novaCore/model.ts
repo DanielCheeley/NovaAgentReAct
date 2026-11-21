@@ -6,10 +6,7 @@ import { toolDefinitions } from "./tools/toolDefinitions";
 import { ModelResponse } from "../types/modelResponseType";
 import type { GenerationOptions } from "../types/generationType";
 import { requestOllama } from "./providers/ollama";
-import { memoryContext } from "./memory/longTermMemoryStore";
-
-import { episodeContext } from "./memory/episodeStore";
-import { preferenceContext } from "./memory/learnPreference";
+import { sharedMemoryContext } from "./memory/memorySources";
 
 type ModelRequest = {
   messages: Message[];
@@ -41,19 +38,16 @@ export function generateResponse(
   } = {}
 ): Promise<ModelResponse> {
   const query = messages.findLast((m) => m.role === "user")?.content ?? "";
-  const recalled = options.chatOnly && !options.recallChannelMemory
-    ? []
-    : [preferenceContext(query), episodeContext(query)].filter(Boolean);
+  const { memory, hasRecall } = options.chatOnly && !options.recallChannelMemory
+    ? { memory: "", hasRecall: false }
+    : sharedMemoryContext(query);
   if (
-    recalled.length ||
+    hasRecall ||
     messages.some((m) => m.role === "tool" && m.tool_name === "getMemories")
   )
     options.onRecallContext?.();
-  const memory = [options.chatOnly ? "" : memoryContext(), ...recalled]
-    .filter(Boolean)
-    .join("\n");
   const discordContext = options.recallChannelMemory
-    ? "This is a shared Discord channel. Use a quoted reply target to understand the latest message. Treat channel memories as optional context and use them only if they directly answer that message. Manual memory tools and reminders are unavailable."
+    ? "This is a shared Discord channel. Use a quoted reply target to understand the latest message. Use memories from Discord or the web app only when they directly help answer it. Manual memory tools and reminders are unavailable."
     : "This is a Discord chat with conversation history. Long-term memory, reminders, and tools are unavailable.";
   const systemPrompt = options.chatOnly
     ? [NOVA_CONVERSATION_PROMPT, discordContext, memory].filter(Boolean).join("\n\n")

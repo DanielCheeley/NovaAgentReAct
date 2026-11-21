@@ -9,7 +9,7 @@
     "concurrently": "^10.0.6"
   },
   "scripts": {
-    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev": "concurrently --names frontend,backend,discord \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run discord\"",
     "dev:frontend": "npm run dev --workspace=frontend",
     "dev:backend": "npm run dev --workspace=backend",
     "discord": "npm run discord --workspace=backend",

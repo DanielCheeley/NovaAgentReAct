@@ -8,7 +8,7 @@ Run these from the repository root:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Start both development servers |
+| `npm run dev` | Start the web frontend, backend, and Discord bot |
 | `npm run dev:frontend` | Start Vite on its default port, 5173 |
 | `npm run dev:backend` | Start the backend development watcher on port 3000 |
 | `npm run discord` | Run the private Discord prototype |
@@ -25,9 +25,13 @@ The existing workspace-specific build and backend start commands remain availabl
 3. Set `DISCORD_BOT_TOKEN` and `DISCORD_CHANNEL_ID` in your existing `backend/.env`. For a separate config, copy `backend/.env.discord.example` to `backend/.env.discord` and fill it in there. Values in `.env.discord` override those in `.env`. Copy the test channel ID using Discord's Developer Mode.
 4. Run `npm install` from the repository root, start Ollama with Nova's configured model available, then run `npm run discord`. Once the bot logs that it connected, send `hey Nova` in the test channel.
 
-The bot replies when anyone in the configured channel says Nova as a whole word, mentions her, or uses Discord's **Reply** on one of her messages with or without a ping. It ignores bots and webhooks. Run `npm run discord` in a separate terminal alongside `npm run dev` to use Discord and the web interface at the same time.
+The bot replies when anyone in the configured channel says Nova as a whole word, mentions her, or uses Discord's **Reply** on one of her messages with or without a ping. It ignores bots and webhooks. `npm run dev` starts the web app and Discord together. Use `npm run discord` to run just the bot.
 
-Discord history and automatically saved episodes persist in `backend/data/nova-discord-channel-<channel-id>.db`. Nova reviews new exchanges after one idle minute by default and can recall relevant episodes in later channel replies. Older exchanges remain in the chat history, and the first review starts from the point this feature is enabled. `MEMORY_REVIEW_IDLE_MS` controls the delay and `0` stops new background reviews. The web app uses its own database. Reminders and manual memory tools are disabled in Discord.
+When triggered, Nova reads up to 12 preceding messages from the configured channel as context for that reply. Those messages are supplied to the model for the current turn and are kept out of the stored transcript. The triggering message and Nova's reply are saved as usual.
+
+Discord history and automatically saved episodes persist in `backend/data/nova-discord-channel-<channel-id>.db`. Nova reviews new exchanges after one idle minute by default. `MEMORY_REVIEW_IDLE_MS` controls the delay and `0` stops new background reviews.
+
+Both interfaces can recall existing saved facts and relevant episodes and interests from either database, labeled **Web app** or **Discord**. Each interface still saves its own conversations and reviews them separately. A Discord reply can bring up a web-app memory, so use a channel you trust to see those memories. Reminders and manual memory tools are disabled in Discord.
 
 ## Long-term memory
 

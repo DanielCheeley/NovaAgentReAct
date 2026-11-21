@@ -12,6 +12,8 @@ import "./novaCore/events/novaEventHandler";
 import "./database/database";
 import { startScheduler } from "./novaCore/tasks/scheduler";
 import { startWebSocketServer } from "./communication/websocket";
+import { discordChannelId, discordDatabasePath } from "./database/discordDatabase";
+import { configureMemorySources } from "./novaCore/memory/memorySources";
 
 //create a logger instance for the server
 const logger = debug("NovaAgent:server");
@@ -38,6 +40,7 @@ const server = createServer(app);
 //set up services
 startWebSocketServer(server);
 startScheduler();
+configureMemorySources("Web app", discordDatabasePath(discordChannelId()));
 startIdleMemoryReview();
 
 server.listen(PORT, () => {

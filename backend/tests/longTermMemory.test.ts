@@ -82,6 +82,24 @@ test("chat-only turns omit saved facts and ignore model tool calls", async () =>
   assert.deepEqual(getMemories(), [saved.memory]);
 });
 
+test("recent Discord messages give the model context without being stored", async () => {
+  const recentChannelContext = [{ speaker: "Alex", text: "Let's play co-op tonight." }];
+  const prompt = "Sam: Nova, what do you think?";
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options!.body as string);
+    assert.equal(body.messages.at(-2).role, "system");
+    assert.ok(body.messages.at(-2).content.includes(JSON.stringify(recentChannelContext)));
+    assert.deepEqual(body.messages.at(-1), { role: "user", content: prompt });
+    return Response.json({ message: { content: "Sounds good to me." } });
+  };
+
+  await handleMessage(1, prompt, { chatOnly: true, recentChannelContext });
+  assert.deepEqual(db.prepare("SELECT content FROM messages ORDER BY id").all(), [
+    { content: prompt },
+    { content: "Sounds good to me." }
+  ]);
+});
+
 test("forget deletes only the chosen saved fact and leaves chat history intact", () => {
   const first = rememberMemory("I like green.").memory;
   const second = rememberMemory("I like tea.").memory;

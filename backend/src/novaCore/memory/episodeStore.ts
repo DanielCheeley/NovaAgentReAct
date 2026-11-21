@@ -142,9 +142,9 @@ export function saveEpisode(input: EpisodeInput): Episode {
   })();
 }
 
-export function getEpisode(id: number): Episode | undefined {
+export function getEpisode(id: number, database = db): Episode | undefined {
   validId(id);
-  const row = db.prepare("SELECT * FROM episodes WHERE id = ?").get(id) as
+  const row = database.prepare("SELECT * FROM episodes WHERE id = ?").get(id) as
     EpisodeRow | undefined;
   return row ? fromRow(row) : undefined;
 }
@@ -182,7 +182,7 @@ const recallStopWords = new Set(
   )
 );
 
-export function episodeContext(query: string): string | undefined {
+export function episodeContext(query: string, database = db): string | undefined {
   const words = (value: string) =>
     new Set(
       (value.toLowerCase().match(/[a-z0-9]{4,}/g) ?? []).filter(
@@ -191,14 +191,14 @@ export function episodeContext(query: string): string | undefined {
     );
   const queryWords = words(query);
   if (!queryWords.size) return;
-  const rows = db
+  const rows = database
     .prepare("SELECT * FROM episodes ORDER BY id DESC LIMIT 100")
     .all() as EpisodeRow[];
   const relevant = rows
     .map((row) => {
       const episode = fromRow(row);
       const turns =
-        db.prepare(`SELECT content FROM messages WHERE conversation_id = ?
+        database.prepare(`SELECT content FROM messages WHERE conversation_id = ?
         AND role = 'user' AND id <= ? ORDER BY id DESC LIMIT 1`);
       if (
         episode.sourceMessageIds.some((id) => {
