@@ -31,6 +31,9 @@ function peerDatabase() {
 }
 
 export function sharedMemoryContext(query: string) {
+  const overview = /\b(?:what (?:do|did|can) you (?:remember|recall|learn)|what (?:saved )?memories do you have|(?:show|list)(?: me)? (?:your |the )?(?:saved )?memories)\s*(?:(?:from|on|in) (discord|(?:the )?web(?: app)?))?\s*[.!?]*\s*$/i.exec(query);
+  const sourceName = overview?.[1]?.toLowerCase();
+  const requestedSource = sourceName === "discord" ? "Discord" : sourceName ? "Web app" : undefined;
   const sources = [{ source: localSource, database: db }];
   const other = peerDatabase();
   if (other) {
@@ -42,7 +45,11 @@ export function sharedMemoryContext(query: string) {
   const sections: string[] = [];
   let hasRecall = false;
   for (const { source, database } of sources) {
-    const recalled = [preferenceContext(query, database), episodeContext(query, database)]
+    if (requestedSource && requestedSource !== source) continue;
+    const recalled = [
+      preferenceContext(query, database, Boolean(overview)),
+      episodeContext(query, database, Boolean(overview))
+    ]
       .filter(Boolean);
     if (recalled.length) hasRecall = true;
     const context = [memoryContext(database), ...recalled].filter(Boolean);
@@ -51,7 +58,7 @@ export function sharedMemoryContext(query: string) {
   return {
     memory: sections.length
       ? [
-          "Use the source on each memory when explaining where you learned it. IDs are local to each source. Attribute memories to their original speakers; a fact about a web user does not describe the current Discord speaker.",
+          "These are memories from your connected apps. Use them to answer explicit memory questions, including questions about the other app. State where each recalled detail came from. IDs are local to each source. Attribute memories to their original speakers; a fact about a web user does not describe the current Discord speaker.",
           ...sections
         ].join("\n\n")
       : "",

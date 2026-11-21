@@ -2,10 +2,12 @@ import { existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { discordChannelId, discordDatabasePath, readEnvFile } from "./database/discordDatabase";
 import {
+  ChannelType,
   Client,
   Events,
   GatewayIntentBits,
   MessageType,
+  Partials,
   type Message
 } from "discord.js";
 
@@ -39,7 +41,7 @@ async function main() {
   const dataDirectory = resolve("data");
   mkdirSync(dataDirectory, { recursive: true });
   process.env.NOVA_DATABASE_PATH = channelDatabase;
-  const { handleMessage } = await import("./novaCore/agent");
+  const { handleMessage, runAgent } = await import("./novaCore/agent");
   const { startIdleMemoryReview } = await import("./novaCore/memory/idleMemoryReview");
   const { configureMemorySources } = await import("./novaCore/memory/memorySources");
   configureMemorySources("Discord", webDatabase);
@@ -48,12 +50,14 @@ async function main() {
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.DirectMessages,
       GatewayIntentBits.MessageContent
     ],
+    partials: [Partials.Channel],
     allowedMentions: { parse: [], repliedUser: false }
   });
   const conversationId = 1;
-  let responding = false;
+  const responding = new Set<string>();
 
   async function reply(message: Message, content: string) {
     // Discord limits each message to 2,000 characters. Keep surrogate pairs intact.
@@ -66,14 +70,15 @@ async function main() {
   }
 
   client.once(Events.ClientReady, ({ user }) => {
-    console.log(`Connected to Discord as ${user.tag}. Listening in channel ${channelId}.`);
+    console.log(`Connected to Discord as ${user.tag}. Listening in channel ${channelId} and direct messages.`);
   });
   client.on(Events.Error, () => console.error("Discord client encountered an error."));
   client.on(Events.MessageCreate, async (message) => {
     const botId = client.user?.id;
+    const directMessage = message.channel.type === ChannelType.DM;
     if (
       !botId ||
-      message.channelId !== channelId ||
+      (!directMessage && message.channelId !== channelId) ||
       message.author.bot ||
       message.webhookId
     ) return;
@@ -85,7 +90,7 @@ async function main() {
       ? await message.fetchReference().catch(() => null)
       : null;
     const replyToNova = original?.author.id === botId ? original : null;
-    if (!replyToNova && !novaName.test(incoming)) return;
+    if (!directMessage && !replyToNova && !novaName.test(incoming)) return;
 
     const latestMessage = `${message.author.username}: ${incoming}`;
     const prompt = replyToNova
@@ -93,43 +98,65 @@ async function main() {
       : latestMessage;
 
     try {
-      if (responding) {
+      if (responding.has(message.channelId)) {
         await reply(message, "I'm still answering your previous message.");
         return;
       }
 
-      responding = true;
+      responding.add(message.channelId);
       try {
         let content: string;
         try {
           const recentMessages = await message.channel.messages
             .fetch({ before: message.id, limit: 12, cache: false })
             .catch(() => null);
-          const recentChannelContext = recentMessages
-            ? [...recentMessages.values()]
-                .reverse()
-                .filter((entry) => entry.content.trim() && entry.id !== replyToNova?.id)
-                .map((entry) => ({
-                  speaker: entry.author.id === botId ? "Nova" : entry.author.username,
-                  text: entry.content.replace(mention, "Nova").trim().slice(0, 500)
-                }))
-            : [];
-          const result = await handleMessage(conversationId, prompt, {
-            chatOnly: true,
-            recallChannelMemory: true,
-            recentChannelContext,
-            signal: AbortSignal.timeout(120_000)
-          });
-          content = result.cancelled
-            ? "I ran out of time. Please try again."
-            : result.response;
+          const preceding = [...(recentMessages?.values() ?? [])]
+            .reverse()
+            .filter((entry) => entry.content.trim() && entry.id !== replyToNova?.id);
+          const signal = AbortSignal.timeout(120_000);
+          if (directMessage) {
+            // Discord already keeps the DM transcript. Keep it out of Nova's shared store.
+            const history = preceding
+              .filter((entry) => entry.author.id === botId || entry.author.id === message.author.id)
+              .map((entry) => ({
+                role: entry.author.id === botId ? "assistant" as const : "user" as const,
+                content: entry.content.trim().slice(0, 500)
+              }));
+            const result = await runAgent(
+              [
+                ...history,
+                { role: "user", content: replyToNova ? prompt : incoming }
+              ],
+              undefined,
+              undefined,
+              { chatOnly: true, discordTools: true, signal }
+            );
+            content = result.cancelled
+              ? "I ran out of time. Please try again."
+              : result.response;
+          } else {
+            const recentChannelContext = preceding.map((entry) => ({
+              speaker: entry.author.id === botId ? "Nova" : entry.author.username,
+              text: entry.content.replace(mention, "Nova").trim().slice(0, 500)
+            }));
+            const result = await handleMessage(conversationId, prompt, {
+              chatOnly: true,
+              discordTools: true,
+              recallChannelMemory: true,
+              recentChannelContext,
+              signal
+            });
+            content = result.cancelled
+              ? "I ran out of time. Please try again."
+              : result.response;
+          }
         } catch {
           console.error("Nova could not generate a Discord reply.");
           content = "I couldn't finish that reply. Please check that Ollama is running and try again.";
         }
         await reply(message, content);
       } finally {
-        responding = false;
+        responding.delete(message.channelId);
       }
     } catch {
       console.error("Could not send Nova's Discord reply. Check the bot's channel permissions.");

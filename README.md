@@ -27,11 +27,17 @@ The existing workspace-specific build and backend start commands remain availabl
 
 The bot replies when anyone in the configured channel says Nova as a whole word, mentions her, or uses Discord's **Reply** on one of her messages with or without a ping. It ignores bots and webhooks. `npm run dev` starts the web app and Discord together. Use `npm run discord` to run just the bot.
 
+You can also open a direct message with Nova and send her a normal text message. She uses recent messages from that DM as context. DM transcripts stay in Discord and do not go into Nova's shared SQLite memory. DM replies use only the DM's conversation context.
+
 When triggered, Nova reads up to 12 preceding messages from the configured channel as context for that reply. Those messages are supplied to the model for the current turn and are kept out of the stored transcript. The triggering message and Nova's reply are saved as usual.
 
 Discord history and automatically saved episodes persist in `backend/data/nova-discord-channel-<channel-id>.db`. Nova reviews new exchanges after one idle minute by default. `MEMORY_REVIEW_IDLE_MS` controls the delay and `0` stops new background reviews.
 
 Both interfaces can recall existing saved facts and relevant episodes and interests from either database, labeled **Web app** or **Discord**. Each interface still saves its own conversations and reviews them separately. A Discord reply can bring up a web-app memory, so use a channel you trust to see those memories. Reminders and manual memory tools are disabled in Discord.
+
+Ask `What do you remember from Discord?` in the web app or `Nova, what do you remember from the web app?` in the configured channel for a summary of recent saved memories from that source.
+
+In the configured channel or a DM, ask Nova for the current time, local date, weather, or a forecast. The clock uses the computer's timezone, and weather requests can include a city and state or country.
 
 ## Long-term memory
 

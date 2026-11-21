@@ -79,7 +79,9 @@ export async function handleMessage(
               : undefined,
             // Persist tool outcomes immediately, including when Stop arrives mid-action.
             onRecord: (generated) => {
-              addMessage(conversationId, generated, memoryInformed);
+              if (!options.chatOnly || (generated.role === "assistant" && generated.content)) {
+                addMessage(conversationId, generated, memoryInformed);
+              }
               options.onRecord?.(generated);
             }
           }

@@ -100,6 +100,55 @@ test("recent Discord messages give the model context without being stored", asyn
   ]);
 });
 
+test("Discord can use the clock while reminder requests remain blocked", async () => {
+  let requests = 0;
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options!.body as string);
+    assert.deepEqual(
+      body.tools.map(({ function: tool }: { function: { name: string } }) => tool.name).sort(),
+      ["getDateAndTime", "getForecast", "getWeather"]
+    );
+    requests++;
+    if (requests === 2) {
+      const result = body.messages.at(-1);
+      assert.equal(result.tool_name, "getDateAndTime");
+      assert.ok(JSON.parse(result.content).data.timezone);
+      return Response.json({ message: { content: "Here's the current time." } });
+    }
+    const name = requests === 1 ? "getDateAndTime" : "scheduleTask";
+    return Response.json({
+      message: { content: "", tool_calls: [{ function: { name, arguments: {} } }] }
+    });
+  };
+
+  const discordOptions = { chatOnly: true, discordTools: true };
+  const clock = await handleMessage(1, "Nova, what time is it and what timezone is that?", discordOptions);
+  assert.equal(clock.response, "Here's the current time.");
+  assert.deepEqual(db.prepare("SELECT role FROM messages ORDER BY id").all(), [
+    { role: "user" },
+    { role: "assistant" }
+  ]);
+  const reminder = await runAgent(
+    [{ role: "user", content: "Remind me tomorrow." }],
+    undefined,
+    undefined,
+    discordOptions
+  );
+  assert.match(reminder.response, /isn't available/);
+  assert.equal(requests, 3);
+});
+
+test("plain Discord clock questions use the host clock without asking the model", async () => {
+  globalThis.fetch = async () => { throw new Error("The model must not be called."); };
+  const result = await handleMessage(1, "alex: Nova, what time is it?", {
+    chatOnly: true,
+    discordTools: true,
+    recallChannelMemory: true
+  });
+  assert.match(result.response, /\d{1,2}:\d{2} [AP]M/);
+  assert.ok(result.response.includes(Intl.DateTimeFormat().resolvedOptions().timeZone));
+});
+
 test("forget deletes only the chosen saved fact and leaves chat history intact", () => {
   const first = rememberMemory("I like green.").memory;
   const second = rememberMemory("I like tea.").memory;
@@ -376,4 +425,71 @@ test("ordinary chat cannot execute an unsolicited fact save", async () => {
         !JSON.parse(message.content).success
     )
   );
+});
+
+test("a natural request can correct a memory without authorizing edits on later turns", async () => {
+  const original = rememberMemory("I live in Springfield.").memory;
+  const replacement = "I live in Chicago.";
+  let requests = 0;
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init!.body as string);
+    const updateAvailable = body.tools.some(
+      ({ function: tool }: { function: { name: string } }) => tool.name === "updateMemory"
+    );
+    requests++;
+    assert.equal(updateAvailable, requests <= 3);
+    if (requests >= 3) {
+      return Response.json({ message: { content: "Got it." } });
+    }
+    return Response.json({
+      message: {
+        content: "",
+        tool_calls: [{
+          function: {
+            name: "updateMemory",
+            arguments: { memoryId: original.id, content: replacement }
+          }
+        }]
+      }
+    });
+  };
+
+  await handleMessage(1, "Nova, could you update what you remember about where I live to Chicago?");
+  assert.equal(getMemories()[0].id, original.id);
+  assert.equal(getMemories()[0].content, replacement);
+  await handleMessage(1, "I visited another city yesterday.");
+  assert.equal(requests, 4);
+  assert.equal(getMemories()[0].content, replacement);
+});
+
+test("an explicit retry authorizes only the immediately preceding rejected memory correction", async () => {
+  const original = rememberMemory("I live in Springfield.").memory;
+  const replacement = "I live in Chicago.";
+  const toolCall = { function: { name: "updateMemory", arguments: {
+    memoryId: original.id,
+    content: replacement
+  } } };
+  let requests = 0;
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init!.body as string);
+    const updateAvailable = body.tools.some(
+      ({ function: tool }: { function: { name: string } }) => tool.name === "updateMemory"
+    );
+    requests++;
+    assert.equal(updateAvailable, requests >= 3 && requests <= 5);
+    return Response.json({
+      message: requests === 5 || requests === 6
+        ? { content: "OK." }
+        : { content: "", tool_calls: [toolCall] }
+    });
+  };
+
+  const rejected = await handleMessage(1, "I moved to Chicago.");
+  assert.match(rejected.response, /Ask me to update the saved memory/);
+  assert.equal(getMemories()[0].content, original.content);
+
+  await handleMessage(1, "i am requesting an update");
+  assert.equal(getMemories()[0].content, replacement);
+  await handleMessage(2, "i am requesting an update");
+  assert.equal(requests, 6);
 });

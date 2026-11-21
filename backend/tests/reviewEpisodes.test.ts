@@ -154,14 +154,17 @@ test("web and Discord prompts can recall the other database with its source labe
   configureMemorySources("Web app", discordDatabase);
   await generateResponse([{ role: "user", content: "How did the painting go?" }]);
   assert.ok(systemMessages[0].split("Memory source: Discord\n")[1]?.includes(candidate.happened));
+  await generateResponse([{ role: "user", content: "What do you remember from Discord?" }]);
+  assert.ok(systemMessages[1].split("Memory source: Discord\n")[1]?.includes(candidate.happened));
+  assert.ok(!systemMessages[1].includes(webFact));
 
   forgetMemory(memory.id);
   configureMemorySources("Discord", webDatabase);
-  await generateResponse([{ role: "user", content: "How does the web user take coffee?" }], {
+  await generateResponse([{ role: "user", content: "alex: Nova, what do you remember from the web app?" }], {
     chatOnly: true,
     recallChannelMemory: true
   });
-  assert.ok(systemMessages[1].split("Memory source: Web app\n")[1]?.includes(webFact));
+  assert.ok(systemMessages[2].split("Memory source: Web app\n")[1]?.includes(webFact));
 });
 test("bad candidates roll back the entire batch and leave the range retryable", async () => {
   const { segment, candidate } = fixture();

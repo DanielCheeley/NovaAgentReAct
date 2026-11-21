@@ -219,7 +219,7 @@ export function preferenceIsCurrent(
   return Number.isFinite(newest) && now - newest < 90 * 24 * 60 * 60 * 1000;
 }
 
-export function preferenceContext(query: string, database = db): string | undefined {
+export function preferenceContext(query: string, database = db, recent = false): string | undefined {
   const words = (value: string) =>
     value
       .toLowerCase()
@@ -233,7 +233,7 @@ export function preferenceContext(query: string, database = db): string | undefi
     .all() as { topic: string; evidence_ids: string }[];
   const matches = [];
   for (const row of rows) {
-    if (!normalized.includes(" " + words(row.topic) + " ")) continue;
+    if (!recent && !normalized.includes(" " + words(row.topic) + " ")) continue;
     const ids = JSON.parse(row.evidence_ids) as number[];
     if (!preferenceIsCurrent(row.topic, ids, Date.now(), database)) continue;
     let sources: Snapshot;

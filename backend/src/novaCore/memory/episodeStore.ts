@@ -182,7 +182,7 @@ const recallStopWords = new Set(
   )
 );
 
-export function episodeContext(query: string, database = db): string | undefined {
+export function episodeContext(query: string, database = db, recent = false): string | undefined {
   const words = (value: string) =>
     new Set(
       (value.toLowerCase().match(/[a-z0-9]{4,}/g) ?? []).filter(
@@ -190,7 +190,7 @@ export function episodeContext(query: string, database = db): string | undefined
       )
     );
   const queryWords = words(query);
-  if (!queryWords.size) return;
+  if (!queryWords.size && !recent) return;
   const rows = database
     .prepare("SELECT * FROM episodes ORDER BY id DESC LIMIT 100")
     .all() as EpisodeRow[];
@@ -208,7 +208,8 @@ export function episodeContext(query: string, database = db): string | undefined
         })
       )
         return { episode, score: 0 };
-      const terms = words(episode.happened);
+      if (recent) return { episode, score: 1 };
+      const terms = words(episode.happened + " " + episode.firstPersonAccount);
       const score = [...queryWords].filter((word) => terms.has(word)).length;
       return { episode, score };
     })

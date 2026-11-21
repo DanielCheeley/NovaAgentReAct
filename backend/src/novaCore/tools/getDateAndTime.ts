@@ -29,3 +29,24 @@ export async function getDateAndTime() {
     iso: now.toISOString()
   };
 }
+
+export async function answerLocalClockQuestion(message: string) {
+  const question = (message.split("\n").at(-1) ?? "")
+    .replace(/^[\w.-]{1,32}:\s*/u, "")
+    .replace(/^nova[\s,!:]+/i, "")
+    .replace(/[?.!]+\s*$/, "")
+    .trim();
+
+  const asksForTime = /^(?:what time is it(?: now)?|(?:(?:what(?:'s| is)|tell me) the )?(?:current |local )?time)$/i.test(question);
+  const asksForDate = /^(?:what(?:'s| is) (?:today'?s date|the (?:current )?date)(?: today)?|what (?:date|day) is it(?: today)?|(?:today'?s |current )?date)$/i.test(question);
+  const asksForBoth = /^(?:what (?:time and date|date and time) is it(?: now)?|(?:what(?:'s| is) the )?(?:current |local )?(?:date and time|time and date))$/i.test(question);
+  if (!asksForTime && !asksForDate && !asksForBoth) return undefined;
+
+  const { iso, timezone } = await getDateAndTime();
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    ...(asksForDate || asksForBoth ? { dateStyle: "full" as const } : {}),
+    ...(asksForTime || asksForBoth ? { timeStyle: "short" as const } : {})
+  }).format(new Date(iso));
+  return `It's ${formatted} (${timezone}).`;
+}

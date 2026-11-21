@@ -1,8 +1,8 @@
-import { requestedMemoryWrite } from "./memory/memoryIntent";
+import { memoryWriteTools, requestedTurnMemoryWrite, type MemoryWriteTool } from "./memory/memoryIntent";
 import { MODEL_CONFIG } from "./novaConfig";
 import { NOVA_CONVERSATION_PROMPT, NOVA_SYSTEM_PROMPT } from "./novaPrompt";
 import { Message } from "../types/conversationType";
-import { toolDefinitions } from "./tools/toolDefinitions";
+import { discordToolNames, toolDefinitions } from "./tools/toolDefinitions";
 import { ModelResponse } from "../types/modelResponseType";
 import type { GenerationOptions } from "../types/generationType";
 import { requestOllama } from "./providers/ollama";
@@ -33,7 +33,9 @@ export function generateResponse(
   messages: Message[],
   options: GenerationOptions & {
     chatOnly?: boolean;
+    discordTools?: boolean;
     recallChannelMemory?: boolean;
+    authorizedMemoryWrite?: MemoryWriteTool | null;
     onRecallContext?: () => void;
   } = {}
 ): Promise<ModelResponse> {
@@ -47,26 +49,32 @@ export function generateResponse(
   )
     options.onRecallContext?.();
   const discordContext = options.recallChannelMemory
-    ? "This is a shared Discord channel. Use a quoted reply target to understand the latest message. Use memories from Discord or the web app only when they directly help answer it. Manual memory tools and reminders are unavailable."
-    : "This is a Discord chat with conversation history. Long-term memory, reminders, and tools are unavailable.";
-  const systemPrompt = options.chatOnly
-    ? [NOVA_CONVERSATION_PROMPT, discordContext, memory].filter(Boolean).join("\n\n")
-    : NOVA_SYSTEM_PROMPT;
+    ? "This is a shared Discord channel. Use a quoted reply target to understand the latest message. Use memories from Discord or the web app only when they directly help answer it."
+    : "This is a Discord DM with conversation history. Shared memory is unavailable.";
+  const discordCapabilities = options.discordTools
+    ? "Use the available tools for current date, time, weather, and forecasts. Get fresh data for each request. The clock reports the host's timezone. Ask for a location if it is needed for weather and missing from the conversation. Reminders and manual memory tools are unavailable."
+    : "Tools are unavailable.";
+  const instructions = options.chatOnly
+    ? [NOVA_CONVERSATION_PROMPT, discordContext, discordCapabilities]
+    : [NOVA_SYSTEM_PROMPT];
+  const systemPrompt = [...instructions, memory].filter(Boolean).join("\n\n");
+  const authorizedMemoryWrite = options.authorizedMemoryWrite === undefined
+    ? requestedTurnMemoryWrite(messages)
+    : options.authorizedMemoryWrite;
   return requestModel(
     {
       messages: [
         { role: "system", content: systemPrompt },
-        ...messages,
-        ...(!options.chatOnly && memory
-          ? [{ role: "system" as const, content: memory }]
-          : [])
+        ...messages
       ],
-      tools: options.chatOnly ? undefined : toolDefinitions.filter(
-        ({ function: { name } }) =>
-          !["rememberMemory", "updateMemory", "forgetMemory"].includes(name) ||
-          name ===
-            requestedMemoryWrite(messages.findLast((m) => m.role === "user"))
-      ),
+      tools: options.chatOnly
+        ? options.discordTools
+          ? toolDefinitions.filter(({ function: { name } }) => discordToolNames.has(name))
+          : undefined
+        : toolDefinitions.filter(
+            ({ function: { name } }) =>
+              !memoryWriteTools.has(name) || name === authorizedMemoryWrite
+          ),
       stream: Boolean(options.onContent) || MODEL_CONFIG.stream,
       think: MODEL_CONFIG.think,
       options: { temperature: MODEL_CONFIG.temperature }

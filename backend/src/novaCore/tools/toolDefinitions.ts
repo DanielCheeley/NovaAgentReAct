@@ -1,3 +1,5 @@
+export const discordToolNames = new Set(["getDateAndTime", "getWeather", "getForecast"]);
+
 export const toolDefinitions = [
   {
     type: "function",
@@ -45,7 +47,7 @@ export const toolDefinitions = [
     function: {
       name: "getMemories",
       description:
-        "List the current saved long-term facts shared across chats, including their IDs. Use when the user asks what you remember or before forgetting a saved fact. This list does not include ordinary chat history or reminders.",
+        "List editable saved facts from the web app and their IDs. Use before correcting or forgetting a saved fact. For questions about what you remember, use the source-labeled memory supplied to you.",
       parameters: { type: "object", properties: {} }
     }
   },

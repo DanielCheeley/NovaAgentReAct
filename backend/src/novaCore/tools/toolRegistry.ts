@@ -5,6 +5,7 @@ import { getForecast } from "./getForecast";
 import { scheduleTask } from "./scheduleTask";
 import { getTasks } from "./getTasks";
 import { cancelTask } from "./cancelTask";
+import { memoryCorrectionAuthorizationError } from "../memory/memoryIntent";
 import { rescheduleTask } from "./rescheduleTask";
 import {
   updateMemory,
@@ -44,7 +45,7 @@ export const tools: Record<string, ToolDefinition> = {
   updateMemory: defineTool(
     async (args, context) => {
       if (!context.memoryWritesAllowed)
-        return toolFailure("Only a user request can correct a memory.");
+      return toolFailure(memoryCorrectionAuthorizationError);
       return toolSuccess(updateMemory(args.memoryId, args.content));
     },
     ["getMemories"]

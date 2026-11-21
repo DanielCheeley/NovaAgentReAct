@@ -1,8 +1,10 @@
-import { requestedMemoryWrite } from "./memory/memoryIntent";
+import { requestedTurnMemoryWrite } from "./memory/memoryIntent";
 import debug from "debug";
 import { generateResponse } from "./model";
 import { Message } from "../types/conversationType";
 import { tools } from "./tools/toolRegistry";
+import { discordToolNames } from "./tools/toolDefinitions";
+import { answerLocalClockQuestion } from "./tools/getDateAndTime";
 import { executeTool } from "./tools/executeTool";
 import { ActionCoordinator } from "./actions/coordinator";
 import { reminderAdapter } from "./actions/reminders";
@@ -12,6 +14,7 @@ import type { ToolDefinition } from "../types/toolTypes";
 
 export type AgentOptions = GenerationOptions & {
   chatOnly?: boolean;
+  discordTools?: boolean;
   recallChannelMemory?: boolean;
   onRecord?: (message: Message) => void;
   onLoopComplete?: (content: string) => void;
@@ -30,7 +33,12 @@ export async function runAgent(
   const MAX_LOOPS = 5;
   const generatedMessages: Message[] = [];
   const executedTools = new Set<string>();
-  const authorizedMemoryTool = requestedMemoryWrite(messages.at(-1));
+  const authorizedMemoryTool = requestedTurnMemoryWrite(messages);
+  const modelOptions = { ...options, authorizedMemoryWrite: authorizedMemoryTool ?? null };
+  const availableTool = (name: string) =>
+    Object.hasOwn(tools, name) && (!options.chatOnly || discordToolNames.has(name))
+      ? tools[name]
+      : undefined;
 
   function finish(content: string) {
     options.signal?.throwIfAborted();
@@ -67,23 +75,28 @@ export async function runAgent(
   }
 
   try {
-    if (options.chatOnly) {
+    if (options.chatOnly && !options.discordTools) {
       options.signal?.throwIfAborted();
-      const response = await respond(messages, options);
+      const response = await respond(messages, modelOptions);
       return finish(response.content?.trim() || "I couldn't generate a reply.");
     }
+    if (options.chatOnly) {
+      const latest = messages.at(-1);
+      const clockAnswer = latest?.role === "user"
+        ? await answerLocalClockQuestion(latest.content)
+        : undefined;
+      if (clockAnswer) return finish(clockAnswer);
+    }
 
-    const actions = new ActionCoordinator(
-      [reminderAdapter(conversationId)],
-      messages,
-      (name, args) => executeTimed(name, tools[name], args)
-    );
+    const actions = options.chatOnly
+      ? undefined
+      : new ActionCoordinator(
+          [reminderAdapter(conversationId)],
+          messages,
+          (name, args) => executeTimed(name, tools[name], args)
+        );
     // Supply fresh clock data even if the model forgets to request it.
-    const clock = await executeTimed(
-      "getDateAndTime",
-      tools.getDateAndTime,
-      {}
-    );
+    const clock = await executeTimed("getDateAndTime", tools.getDateAndTime, {});
     if (clock.success) executedTools.add("getDateAndTime");
     // Background context is not a model-requested action or saved chat message.
     messages.push({
@@ -93,19 +106,22 @@ export async function runAgent(
         : "Background clock context is unavailable. Continue ordinary conversation normally; if the request needs current time, call getDateAndTime and do not guess."
     });
 
-    messages.push({
-      role: "system",
-      content: `Active action context: ${JSON.stringify(actions.context())}. Resolve corrections against these verified resources. Retry reuses successful outcomes. For relative reminders supply delaySeconds; the backend calculates time at execution. Ask when intent is uncertain. This context is not permission to start an action.`
-    });
+    if (actions) {
+      messages.push({
+        role: "system",
+        content: `Active action context: ${JSON.stringify(actions.context())}. Resolve corrections against these verified resources. Retry reuses successful outcomes. For relative reminders supply delaySeconds; the backend calculates time at execution. Ask when intent is uncertain. This context is not permission to start an action.`
+      });
+    }
 
     for (let i = 0; i < MAX_LOOPS; i++) {
       options.signal?.throwIfAborted();
       options.onContent?.("");
-      const response = await respond(messages, options);
+      const response = await respond(messages, modelOptions);
       options.signal?.throwIfAborted();
 
       if (!response.tool_calls || response.tool_calls.length === 0) {
-        return finish(response.content ?? "");
+        const content = response.content ?? "";
+        return finish(options.chatOnly ? content.trim() || "I couldn't generate a reply." : content);
       }
 
       // Keep visible narration independently of the tool protocol, including
@@ -119,7 +135,7 @@ export async function runAgent(
       for (const toolCall of response.tool_calls) {
         const toolName = toolCall.function.name;
 
-        if (!tools[toolName]) {
+        if (!availableTool(toolName)) {
           return finish(
             `I couldn't complete that request because the tool "${toolName}" isn't available. Please rephrase the request.`
           );
@@ -131,7 +147,7 @@ export async function runAgent(
 
       for (const toolCall of response.tool_calls) {
         const toolName = toolCall.function.name;
-        const tool = tools[toolName];
+        const tool = availableTool(toolName)!;
 
         for (const requirement of tool.requires ?? []) {
           if (!executedTools.has(requirement)) {
@@ -143,7 +159,7 @@ export async function runAgent(
       // Run missing prerequisites before the requested tools.
       if (missingPrerequisites.size > 0) {
         for (const prerequisite of missingPrerequisites) {
-          const tool = tools[prerequisite];
+          const tool = availableTool(prerequisite);
 
           if (!tool) {
             return finish(
@@ -219,7 +235,9 @@ export async function runAgent(
 
         const result = options.signal?.aborted
           ? toolFailure("Request stopped before this tool executed.")
-          : await actions.run(toolName, toolCall.function.arguments);
+          : await (actions
+              ? actions.run(toolName, toolCall.function.arguments)
+              : executeTimed(toolName, tool, toolCall.function.arguments));
 
         logger("Tool result:", result);
 
@@ -235,7 +253,7 @@ export async function runAgent(
         if (result.success) {
           executedTools.add(toolName);
         } else {
-          failures.push(`The ${toolName} tool failed: ${result.error}.`);
+          failures.push(`The ${toolName} tool failed: ${result.error}${/[.!?]$/.test(result.error) ? "" : "."}`);
         }
       }
 
